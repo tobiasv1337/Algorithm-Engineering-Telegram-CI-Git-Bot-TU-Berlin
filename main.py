@@ -12,7 +12,7 @@ load_dotenv()
 # Configuration
 CHECK_INTERVAL = 10  # Check every 10 seconds
 REPO_PATH = "/home/contestbot/test"  # Set your repository path here
-API_TOKEN = os.getenv("API_TOKEN")  # Load API token from .env file
+OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env file
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
@@ -146,7 +146,7 @@ def submit_solution(zip_filename, config):
     """Submit the solution via the OIOIOI API."""
     url = f"https://algeng.inet.tu-berlin.de/api/c/{config['contest']}/submit/{config['problem_short_name']}"
     headers = {
-        "Authorization": f"token {API_TOKEN}"
+        "Authorization": f"token {OIOIOI_API_TOKEN}"
     }
     files = {'file': (zip_filename, open(zip_filename, 'rb'))}
     
