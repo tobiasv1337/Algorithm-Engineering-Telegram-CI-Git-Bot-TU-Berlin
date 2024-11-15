@@ -13,6 +13,8 @@ load_dotenv()
 CHECK_INTERVAL = 10  # Check every 10 seconds
 REPO_PATH = "/home/contestbot/test"  # Set your repository path here
 API_TOKEN = os.getenv("API_TOKEN")  # Load API token from .env file
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 
 # Load last processed commit hashes from file
@@ -31,20 +33,39 @@ def save_last_commits(last_commit_per_branch):
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
+def send_telegram_message(message):
+    """Send a message to the Telegram group."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            print("Message sent to Telegram successfully.")
+        else:
+            print(f"Failed to send message to Telegram. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error sending message to Telegram: {e}")
+
 def fetch_all_branches():
     """Fetch all branches from the remote repository and handle fetch errors."""
     try:
         subprocess.run(["git", "-C", REPO_PATH, "fetch", "--all"], check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error fetching branches: {e}")
-        print("Retrying fetch on next iteration...")
+        message = f"Error fetching branches: {e}\nRetrying fetch on next iteration..."
+        print(message)
+        send_telegram_message(message)
 
 def get_latest_commit(branch):
     """Get the latest commit hash on the specified branch. Return None if the branch does not exist."""
     try:
         return subprocess.check_output(["git", "-C", REPO_PATH, "rev-parse", f"origin/{branch}"]).strip().decode('utf-8')
     except subprocess.CalledProcessError:
-        print(f"Warning: Branch '{branch}' does not exist on the remote. Skipping.")
+        message = f"Warning: Branch '{branch}' does not exist on the remote. Skipping."
+        print(message)
+        send_telegram_message(message)
         return None
 
 def load_config_from_commit(commit_hash):
@@ -53,7 +74,9 @@ def load_config_from_commit(commit_hash):
         config_data = subprocess.check_output(["git", "-C", REPO_PATH, "show", f"{commit_hash}:submission_config.json"])
         return json.loads(config_data)
     except subprocess.CalledProcessError:
-        print(f"Configuration file 'submission_config.json' not found in commit {commit_hash}.")
+        message = f"Configuration file 'submission_config.json' not found in commit {commit_hash}."
+        print(message)
+        send_telegram_message(message)
         return None
 
 def get_tracked_branches():
@@ -94,6 +117,31 @@ def create_zip_file(config):
                 print(f"Warning: Path '{path}' not found in the repository.")
     return zip_filename
 
+def check_for_compiler_errors():
+    """Run a compilation check and return True if there are no errors or warnings."""
+    try:
+        result = subprocess.run(["cargo", "check"], cwd=REPO_PATH, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            message = f"Compiler error or warning detected:\n{result.stderr}"
+            print(message)
+            send_telegram_message(message)
+            return False  # Compilation failed with errors or warnings
+
+        if "warning" in result.stderr.lower():
+            message = f"Warning detected during compilation:\n{result.stderr}"
+            print(message)
+            send_telegram_message(message)
+            return False  # Warnings found
+
+        print("No compiler errors or warnings detected.")
+        return True  # Compilation successful with no warnings
+    except subprocess.CalledProcessError as e:
+        message = f"Error running compilation check: {e}"
+        print(message)
+        send_telegram_message(message)
+        return False
+
 def submit_solution(zip_filename, config):
     """Submit the solution via the OIOIOI API."""
     url = f"https://algeng.inet.tu-berlin.de/api/c/{config['contest']}/submit/{config['problem_short_name']}"
@@ -105,9 +153,13 @@ def submit_solution(zip_filename, config):
     response = requests.post(url, headers=headers, files=files)
     
     if response.status_code == 200:
-        print("Submission successful:", response.json())
+        message = "Submission successful."
+        print(message)
+        send_telegram_message(message)
     else:
-        print("Submission failed:", response.status_code, response.text)
+        message = f"Submission failed: {response.status_code}\n{response.text}"
+        print(message)
+        send_telegram_message(message)
 
 def main():
     global last_commit_per_branch
@@ -127,16 +179,29 @@ def main():
 
             # Check if there's a new commit on this branch
             if branch not in last_commit_per_branch or current_commit != last_commit_per_branch[branch]:
-                print(f"New commit detected: {current_commit} on branch '{branch}'")
+                message = f"New commit detected: {current_commit} on branch '{branch}'"
+                print(message)
+                send_telegram_message(message)
 
                 # Load the config file from this specific commit
                 config = load_config_from_commit(current_commit)
                 
                 # Skip if config is missing or AUTOCOMMIT is not enabled
                 if not config or not config.get("AUTOCOMMIT", False):
-                    print("AUTOCOMMIT is disabled or config is missing.")
+                    message = "AUTOCOMMIT is disabled or config is missing. Skipping submission."
+                    print(message)
+                    send_telegram_message(message)
                     last_commit_per_branch[branch] = current_commit
-                    save_last_commits(last_commit_per_branch)  # Persist the last commits
+                    save_last_commits(last_commit_per_branch)
+                    continue
+
+                # Check for compiler errors and warnings
+                if not check_for_compiler_errors():
+                    message = "Skipping submission due to compiler errors or warnings."
+                    print(message)
+                    send_telegram_message(message)
+                    last_commit_per_branch[branch] = current_commit
+                    save_last_commits(last_commit_per_branch)
                     continue
 
                 # Create zip file based on include paths
@@ -150,7 +215,7 @@ def main():
                 
                 # Update the last processed commit for this branch and save to file
                 last_commit_per_branch[branch] = current_commit
-                save_last_commits(last_commit_per_branch)  # Persist the last commits
+                save_last_commits(last_commit_per_branch)
 
         time.sleep(CHECK_INTERVAL)
 
