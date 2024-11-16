@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import signal
 import subprocess
 import requests
 from zipfile import ZipFile
@@ -16,6 +17,15 @@ OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env fil
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
+
+# Global variable to track requested shutdown
+shutdown_flag = False
+
+# Graceful shutdown handler
+def handle_shutdown_signal(signum, frame):
+    global shutdown_flag
+    print(f"\nSignal {signum} received. Shutting down gracefully...")
+    shutdown_flag = True
 
 # Load last processed commit hashes from file
 def load_last_commits():
@@ -162,9 +172,10 @@ def submit_solution(zip_filename, config):
         send_telegram_message(message)
 
 def main():
+    global shutdown_flag
     global last_commit_per_branch
 
-    while True:
+    while not shutdown_flag:
         fetch_all_branches()
 
         # Check branches to track from the main branch configuration
@@ -220,4 +231,9 @@ def main():
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
+    # Register signal handlers
+    signal.signal(signal.SIGINT, handle_shutdown_signal)  # Ctrl+C
+    signal.signal(signal.SIGTERM, handle_shutdown_signal)  # Termination signal
+
+    print("Starting script. Press Ctrl+C to stop.")
     main()
