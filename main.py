@@ -47,12 +47,14 @@ def save_last_commits(last_commit_per_branch):
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
-def send_telegram_message(message):
-    """Send a message to the Telegram group."""
+def send_telegram_message(message, disable_web_page_preview=True, parse_mode="Markdown"):
+    """Send a detailed message to the Telegram group."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
-        "text": message
+        "text": message,
+        "disable_web_page_preview": disable_web_page_preview,
+        "parse_mode": parse_mode,
     }
     try:
         response = requests.post(url, data=payload)
@@ -220,9 +222,9 @@ def login_to_oioioi():
 
     return session
 
-def fetch_test_results(session, submission_id):
+def fetch_test_results(session, contest_id, submission_id):
     """Fetch and parse the test results from the HTML report."""
-    url = f"{OIOIOI_BASE_URL}/c/vc2/get_report_HTML/{submission_id}/"
+    url = f"{OIOIOI_BASE_URL}/c/{contest_id}/get_report_HTML/{submission_id}/"
     try:
         response = session.get(url)
         response.raise_for_status()
@@ -290,17 +292,23 @@ def format_results_message(grouped_results):
     return message
 
 
-def wait_for_results(session, submission_id, check_interval=30):
+def wait_for_results(session, contest_id, submission_id, check_interval=30):
     """Poll the results page periodically and send grouped results to Telegram."""
+    results_url = f"{OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
     while True:
-        grouped_results = fetch_test_results(session, submission_id)
+        grouped_results = fetch_test_results(session, contest_id, submission_id)
         if grouped_results:
             message = format_results_message(grouped_results)
-            print(message)
-            send_telegram_message(message)
+            detailed_message = (
+                f"📝 *Results for Submission ID*: `{submission_id}`\n\n"
+                f"{message}\n"
+                f"[🔗 View Full Results Here]({results_url})"
+            )
+            print(detailed_message)
+            send_telegram_message(detailed_message)
             break
         else:
-            print("Results not available yet. Checking again in a few seconds...")
+            print(f"Results for submission {submission_id} not available yet. Checking again in {check_interval} seconds...")
             time.sleep(check_interval)
 
 def main():
@@ -325,7 +333,16 @@ def main():
 
             # Check if there's a new commit on this branch
             if branch not in last_commit_per_branch or current_commit != last_commit_per_branch[branch]:
-                message = f"New commit detected: {current_commit} on branch '{branch}'"
+                commit_message = subprocess.check_output(
+                    ["git", "-C", REPO_PATH, "log", "-1", "--pretty=%B", current_commit]
+                ).strip().decode('utf-8')
+
+                message = (
+                    f"🚨 *New Commit Detected*\n"
+                    f"• *Branch*: `{branch}`\n"
+                    f"• *Commit Hash*: `{current_commit}`\n"
+                    f"• *Message*: {commit_message}\n"
+                )
                 print(message)
                 send_telegram_message(message)
 
@@ -334,7 +351,12 @@ def main():
 
                 # Skip if config is missing or AUTOCOMMIT is not enabled
                 if not config or not config.get("AUTOCOMMIT", False):
-                    message = "AUTOCOMMIT is disabled or config is missing. Skipping submission."
+                    message = (
+                        f"⚠️ *Skipping Submission*\n"
+                        f"• *Reason*: AUTOCOMMIT is disabled or config is missing.\n"
+                        f"• *Branch*: `{branch}`\n"
+                        f"• *Commit Hash*: `{current_commit}`"
+                    )
                     print(message)
                     send_telegram_message(message)
                     last_commit_per_branch[branch] = current_commit
@@ -343,7 +365,11 @@ def main():
 
                 # Check for compiler errors and warnings
                 if not check_for_compiler_errors():
-                    message = "Skipping submission due to compiler errors or warnings."
+                    message = (
+                        f"❌ *Compilation Failed*\n"
+                        f"• *Branch*: `{branch}`\n"
+                        f"• *Commit Hash*: `{current_commit}`"
+                    )
                     print(message)
                     send_telegram_message(message)
                     last_commit_per_branch[branch] = current_commit
@@ -356,12 +382,17 @@ def main():
                 # Submit the solution and retrieve the submission ID
                 submission_id = submit_solution(zip_filename, config)
                 if submission_id:
-                    message = f"Submission {submission_id} accepted. Waiting for results..."
+                    message = (
+                        f"✅ *Submission Accepted*\n"
+                        f"• *Branch*: `{branch}`\n"
+                        f"• *Submission ID*: `{submission_id}`\n"
+                        f"• Waiting for results..."
+                    )
                     print(message)
                     send_telegram_message(message)
 
                     # Wait for and fetch the results of the submission
-                    wait_for_results(session, submission_id)
+                    wait_for_results(session, config['contest'], submission_id)
 
                 # Clean up
                 os.remove(zip_filename)
