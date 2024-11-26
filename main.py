@@ -195,27 +195,26 @@ def create_zip_files(config):
 
     return created_files
 
-def check_for_compiler_errors():
-    """Run a compilation check and return True if there are no errors or warnings."""
+def check_for_compiler_errors(config):
     try:
         result = subprocess.run(["cargo", "check"], cwd=REPO_PATH, capture_output=True, text=True)
         
-        if result.returncode != 0:
-            message = f"Compiler error or warning detected:\n{result.stderr}"
+        if result.returncode != 0 and not config.get("ALLOW_ERRORS", False):
+            message = f"❌ Compiler error detected:\n{result.stderr}"
             print(message)
             send_telegram_message(message)
-            return False  # Compilation failed with errors or warnings
+            return False  # Compilation failed and errors are not allowed
 
-        if "warning" in result.stderr.lower():
-            message = f"Warning detected during compilation:\n{result.stderr}"
+        if "warning" in result.stderr.lower() and not config.get("ALLOW_WARNINGS", False):
+            message = f"⚠️ Warning detected during compilation:\n{result.stderr}"
             print(message)
             send_telegram_message(message)
-            return False  # Warnings found
+            return False  # Warnings found and not allowed
 
-        print("No compiler errors or warnings detected.")
-        return True  # Compilation successful with no warnings
+        print("✅ No compiler errors or warnings detected (or allowed).")
+        return True  # Compilation successful or warnings/errors are allowed
     except subprocess.CalledProcessError as e:
-        message = f"Error running compilation check: {e}"
+        message = f"❌ Error running compilation check: {e}"
         print(message)
         send_telegram_message(message)
         return False
@@ -692,11 +691,13 @@ def main():
                     continue
 
                 # Check for compiler errors and warnings
-                if not check_for_compiler_errors():
+                if not check_for_compiler_errors(config):
                     message = (
                         f"❌ *Compilation Failed*\n"
                         f"• *Branch*: `{branch}`\n"
-                        f"• *Commit Hash*: `{current_commit}`"
+                        f"• *Commit Hash*: `{current_commit}`\n"
+                        f"• *Warnings Allowed*: {config.get('ALLOW_WARNINGS', False)}\n"
+                        f"• *Errors Allowed*: {config.get('ALLOW_ERRORS', False)}"
                     )
                     print(message)
                     send_telegram_message(message)
