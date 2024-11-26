@@ -47,23 +47,33 @@ def save_last_commits(last_commit_per_branch):
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
-def send_telegram_message(message, disable_web_page_preview=True, parse_mode="Markdown"):
-    """Send a detailed message to the Telegram group."""
+def send_telegram_message(message, parse_mode="Markdown", disable_web_page_preview=True):
+    """Send a message to the Telegram group. Automatically splits long messages if needed."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "disable_web_page_preview": disable_web_page_preview,
-        "parse_mode": parse_mode,
-    }
-    try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            print("Message sent to Telegram successfully.")
-        else:
-            print(f"Failed to send message to Telegram. Status code: {response.status_code}")
-    except Exception as e:
-        print(f"Error sending message to Telegram: {e}")
+    max_length = 4096  # Telegram's maximum message length
+
+    # Split message into smaller chunks if it's too long
+    if len(message) > max_length:
+        split_messages = [message[i:i + max_length] for i in range(0, len(message), max_length)]
+    else:
+        split_messages = [message]
+
+    for part in split_messages:
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": part,
+            "parse_mode": parse_mode,  # Pass the parse mode as a parameter
+            "disable_web_page_preview": disable_web_page_preview  # Pass link preview toggle
+        }
+        try:
+            response = requests.post(url, data=payload)
+            if response.status_code == 200:
+                print("Message sent to Telegram successfully.")
+            else:
+                print(f"Failed to send message to Telegram. Status code: {response.status_code}")
+                print(f"Response: {response.text}")
+        except Exception as e:
+            print(f"Error sending message to Telegram: {e}")
 
 def fetch_all_branches():
     """Fetch all branches from the remote repository and handle fetch errors."""
@@ -304,41 +314,69 @@ def fetch_test_results(session, contest_id, submission_id):
         return None
 
 
-def format_results_message(grouped_results):
-    """Format the grouped test results into a human-readable message."""
+def format_results_message(grouped_results, results_url):
+    """
+    Format the grouped test results into a structured multi-part message for Telegram.
+    Splits into a header, per-group messages, and a summary with a link to the results at the end.
+    """
     if not grouped_results:
-        return "No results available yet."
+        return ["No results available yet."]
 
-    message = "Test Results:\n"
+    messages = []
+
+    # Header with overall information
+    total_score = sum(data["total_score"] for data in grouped_results.values())
+    header = f"✅ *Test Results Overview*\n\n" \
+             f"• Total Groups: {len(grouped_results)}\n" \
+             f"• Overall Score: {total_score:.2f}\n\n" \
+             f"Detailed Results:\n" \
+             f"\n📥 [View Full Results Here]({results_url})"
+    messages.append(header)
+
+    # Detailed results per group
     for group, data in sorted(grouped_results.items()):
-        message += f"Group {group}:\n"
+        group_message = f"📂 *Group {group}*\n" \
+                        f"• Total Score: {data['total_score']:.2f}\n\n"
         for test in data["tests"]:
-            message += f"  Test: {test['test_name']}\n"
-            message += f"    Result: {test['result']}\n"
-            message += f"    Runtime: {test['runtime']}\n"
-            message += f"    Score: {test['score']}\n"
-        message += f"  Total Group Score: {data['total_score']}\n\n"
+            group_message += (
+                f"🔹 *Test*: {test['test_name']}\n"
+                f"  • Result: {test['result']}\n"
+                f"  • Runtime: {test['runtime']}\n"
+                f"  • Score: {test['score']}\n\n"
+            )
+        messages.append(group_message)
 
-    return message
+    # Final summary with the link at the end
+    summary = f"📊 *Final Summary*\n\n" \
+              f"• Total Groups: {len(grouped_results)}\n" \
+              f"• Overall Score: {total_score:.2f}\n\n" \
+              f"📥 [View Full Results Here]({results_url})"  # Add the link again here
+    messages.append(summary)
+
+    # Add the link to the very end of the last message explicitly
+    messages[-1] += f"\n\n📥 [View Full Results Here]({results_url})"
+
+    return messages
 
 
 def wait_for_results(session, contest_id, submission_id, check_interval=30):
-    """Poll the results page periodically and send grouped results to Telegram."""
+    """
+    Poll the results page periodically and send structured results to Telegram.
+    Splits messages into header, per-group details, and a summary, with a link in the last message.
+    """
     results_url = f"{OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
+
     while True:
         grouped_results = fetch_test_results(session, contest_id, submission_id)
         if grouped_results:
-            message = format_results_message(grouped_results)
-            detailed_message = (
-                f"📝 *Results for Submission ID*: `{submission_id}`\n\n"
-                f"{message}\n"
-                f"[🔗 View Full Results Here]({results_url})"
-            )
-            print(detailed_message)
-            send_telegram_message(detailed_message)
+            # Format and send results
+            messages = format_results_message(grouped_results, results_url)
+
+            for msg in messages:
+                send_telegram_message(msg)
             break
         else:
-            print(f"Results for submission {submission_id} not available yet. Checking again in {check_interval} seconds...")
+            print("Results not available yet. Checking again in a few seconds...")
             time.sleep(check_interval)
 
 def main():
