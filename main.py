@@ -196,25 +196,32 @@ def create_zip_files(config):
     return created_files
 
 def check_for_compiler_errors(config):
+    """Run a compilation check, send Telegram warnings/errors, and decide whether to block submission."""
     try:
         result = subprocess.run(["cargo", "check"], cwd=REPO_PATH, capture_output=True, text=True)
         
-        if result.returncode != 0 and not config.get("ALLOW_ERRORS", False):
-            message = f"❌ Compiler error detected:\n{result.stderr}"
+        # Check for errors
+        if result.returncode != 0:
+            message = f"❌ *Compiler Errors Detected*\n\n{result.stderr}"
             print(message)
             send_telegram_message(message)
-            return False  # Compilation failed and errors are not allowed
+            if not config.get("ALLOW_ERRORS", False):
+                print("Errors not allowed. Blocking submission.")
+                return False  # Block submission if errors are not allowed
 
-        if "warning" in result.stderr.lower() and not config.get("ALLOW_WARNINGS", False):
-            message = f"⚠️ Warning detected during compilation:\n{result.stderr}"
+        # Check for warnings
+        if "warning" in result.stderr.lower():
+            message = f"⚠️ *Compiler Warnings Detected*\n\n{result.stderr}"
             print(message)
             send_telegram_message(message)
-            return False  # Warnings found and not allowed
+            if not config.get("ALLOW_WARNINGS", False):
+                print("Warnings not allowed. Blocking submission.")
+                return False  # Block submission if warnings are not allowed
 
-        print("✅ No compiler errors or warnings detected (or allowed).")
-        return True  # Compilation successful or warnings/errors are allowed
+        print("✅ Compilation check completed. Warnings/errors allowed, proceeding with submission.")
+        return True  # Continue submission
     except subprocess.CalledProcessError as e:
-        message = f"❌ Error running compilation check: {e}"
+        message = f"❌ *Error Running Compilation Check*\n\n{str(e)}"
         print(message)
         send_telegram_message(message)
         return False
