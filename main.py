@@ -15,6 +15,7 @@ load_dotenv()
 # Configuration
 CHECK_INTERVAL = 10  # Check every 10 seconds
 REPO_PATH = "/home/contestbot/vertex_cover"  # Set your repository path here
+PRIMARY_BRANCH = "master"  # Change this to "main" or any other branch name as needed
 OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
 OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
 OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
@@ -144,13 +145,13 @@ def load_config_from_commit(commit_hash):
         return None
 
 def get_tracked_branches():
-    """Retrieve the list of branches to track from the last commit's configuration on main."""
-    main_commit = get_latest_commit("main")
-    if main_commit:
-        config = load_config_from_commit(main_commit)
+    """Retrieve the list of branches to track from the last commit's configuration on PRIMARY_BRANCH."""
+    primary_branch_commit = get_latest_commit(PRIMARY_BRANCH)
+    if primary_branch_commit:
+        config = load_config_from_commit(primary_branch_commit)
         if config and "branches" in config:
             return config["branches"]
-    return ["main"]  # Default to main if branches are not specified
+    return [PRIMARY_BRANCH]  # Default to PRIMARY_BRANCH if branches are not specified
 
 def create_zip_files(config):
     """
@@ -595,14 +596,14 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
 
 def perform_auto_merge(branch):
     """
-    Automatically merge the specified branch into `main` after successful testing.
+    Automatically merge the specified branch into PRIMARY_BRANCH after successful testing.
     Only performs the merge if there are no conflicts.
     """
     try:
-        # Step 1: Checkout the main branch
-        subprocess.run(["git", "-C", REPO_PATH, "checkout", "main"], check=True)
+        # Step 1: Checkout the PRIMARY_BRANCH branch
+        subprocess.run(["git", "-C", REPO_PATH, "checkout", PRIMARY_BRANCH], check=True)
 
-        # Step 2: Merge the target branch into main with --no-commit and --no-ff to detect conflicts
+        # Step 2: Merge the target branch into PRIMARY_BRANCH with --no-commit and --no-ff to detect conflicts
         merge_result = subprocess.run(
             ["git", "-C", REPO_PATH, "merge", "--no-commit", "--no-ff", branch],
             stdout=subprocess.PIPE,
@@ -614,7 +615,7 @@ def perform_auto_merge(branch):
         if "CONFLICT" in merge_result.stderr:
             send_telegram_message(
                 f"⚠️ *Merge Conflict Detected*\n"
-                f"Branch `{branch}` could not be merged into `main` due to conflicts.\n"
+                f"Branch `{branch}` could not be merged into `{PRIMARY_BRANCH}` due to conflicts.\n"
                 f"Details:\n```\n{merge_result.stderr.strip()}\n```"
             )
 
@@ -623,18 +624,18 @@ def perform_auto_merge(branch):
             return
 
         # Step 3: Commit and complete the merge if no conflicts
-        subprocess.run(["git", "-C", REPO_PATH, "commit", "-m", f"Merge branch '{branch}' into main"], check=True)
+        subprocess.run(["git", "-C", REPO_PATH, "commit", "-m", f"Merge branch '{branch}' into `{PRIMARY_BRANCH}`"], check=True)
 
         # Step 4: Push the merged changes to the remote
-        subprocess.run(["git", "-C", REPO_PATH, "push", "origin", "main"], check=True)
+        subprocess.run(["git", "-C", REPO_PATH, "push", "origin", PRIMARY_BRANCH], check=True)
 
         # Send Telegram notification about success
         send_telegram_message(f"✅ *Auto-Merge Successful*\n"
-                              f"Branch `{branch}` was successfully merged into `main`.")
+                              f"Branch `{branch}` was successfully merged into `{PRIMARY_BRANCH}`.")
     except subprocess.CalledProcessError as e:
         # Handle unexpected errors during merge and notify via Telegram
         send_telegram_message(f"❌ *Auto-Merge Failed*\n"
-                              f"Error during merging branch `{branch}` into `main`.\n"
+                              f"Error during merging branch `{branch}` into `{PRIMARY_BRANCH}`.\n"
                               f"Details: {str(e)}")
 
 
@@ -648,7 +649,7 @@ def main():
     while not shutdown_flag:
         fetch_all_branches()
 
-        # Check branches to track from the main branch configuration
+        # Check branches to track from the PRIMARY_BRANCH configuration
         branches_to_check = get_tracked_branches()
 
         for branch in branches_to_check:
@@ -725,7 +726,7 @@ def main():
                         else:
                             send_telegram_message(
                                 f"⚠️ *Auto-Merge Skipped*\n"
-                                f"Branch `{branch}` was not merged into `main` due to test failures."
+                                f"Branch `{branch}` was not merged into `{PRIMARY_BRANCH}` due to test failures."
                             )
 
                 # Clean up
