@@ -469,21 +469,24 @@ def compare_results(contest_id, grouped_results):
     }
     save_submission_history(history)
 
-    return "\n".join(summary)
+    return summary
 
 
 def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
     """Send a detailed summary of improvements and results via Telegram."""
+    # Generate detailed results messages
+    detailed_messages = format_results_message(grouped_results, results_url)
+    
+    # Generate improvement summary
     improvement_summary = compare_results(contest_id, grouped_results)
-    messages = format_results_message(grouped_results, results_url)
-
-    # Add improvement summary as the first message
     summary_message = f"🚀 *Improvement Summary*:\n{improvement_summary}\n\n📥 [View Full Results Here]({results_url})"
-    send_telegram_message(summary_message)
-
-    # Send detailed test results
-    for message in messages:
+    
+    # Send detailed test results first
+    for message in detailed_messages:
         send_telegram_message(message)
+
+    # Send the improvement summary after detailed results
+    send_telegram_message(summary_message)
 
 
 def main():
