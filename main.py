@@ -104,34 +104,47 @@ def get_tracked_branches():
             return config["branches"]
     return ["main"]  # Default to main if branches are not specified
 
-def create_zip_file(config):
-    """Create a zip file with specified paths, ensuring all paths are within the repo."""
-    zip_filename = "submission.zip"
-    with ZipFile(zip_filename, 'w') as zipf:
-        for path in config.get("include_paths", []):
-            full_path = os.path.join(REPO_PATH, os.path.normpath(path))
+def create_zip_files(config):
+    """
+    Create multiple ZIP files based on the `zip_files` configuration in the submission config.
+    Returns a list of created ZIP file paths.
+    """
+    zip_files = config.get("zip_files", [])
+    created_files = []
 
-            # Verify that each path is within the repository and not a symlink
-            if not full_path.startswith(REPO_PATH) or os.path.islink(full_path):
-                print(f"Skipping unsafe or invalid path: '{path}'")
-                continue
+    for zip_config in zip_files:
+        zip_name = zip_config.get("zip_name", "submission.zip")
+        include_paths = zip_config.get("include_paths", [])
+        zip_path = os.path.join(REPO_PATH, zip_name)
 
-            # If the path is a file, add it directly
-            if os.path.isfile(full_path):
-                zipf.write(full_path, os.path.relpath(full_path, REPO_PATH))
-            # If the path is a directory, walk through and add all files within it
-            elif os.path.isdir(full_path):
-                for root, _, files in os.walk(full_path):
-                    if os.path.islink(root):
-                        print(f"Skipping symlinked directory: '{root}'")
-                        continue
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        if not os.path.islink(file_path):
-                            zipf.write(file_path, os.path.relpath(file_path, REPO_PATH))
-            else:
-                print(f"Warning: Path '{path}' not found in the repository.")
-    return zip_filename
+        with ZipFile(zip_path, 'w') as zipf:
+            for path in include_paths:
+                full_path = os.path.join(REPO_PATH, os.path.normpath(path))
+
+                # Verify that each path is within the repository and not a symlink
+                if not full_path.startswith(REPO_PATH) or os.path.islink(full_path):
+                    print(f"Skipping unsafe or invalid path: '{path}'")
+                    continue
+
+                # If the path is a file, add it directly
+                if os.path.isfile(full_path):
+                    zipf.write(full_path, os.path.relpath(full_path, REPO_PATH))
+                # If the path is a directory, walk through and add all files within it
+                elif os.path.isdir(full_path):
+                    for root, _, files in os.walk(full_path):
+                        if os.path.islink(root):
+                            print(f"Skipping symlinked directory: '{root}'")
+                            continue
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            if not os.path.islink(file_path):
+                                zipf.write(file_path, os.path.relpath(file_path, REPO_PATH))
+                else:
+                    print(f"Warning: Path '{path}' not found in the repository.")
+
+        created_files.append(zip_path)
+
+    return created_files
 
 def check_for_compiler_errors():
     """Run a compilation check and return True if there are no errors or warnings."""
@@ -158,25 +171,42 @@ def check_for_compiler_errors():
         send_telegram_message(message)
         return False
 
-def submit_solution(zip_filename, config):
-    """Submit the solution via the OIOIOI API."""
-    url = f"https://algeng.inet.tu-berlin.de/api/c/{config['contest']}/submit/{config['problem_short_name']}"
+def submit_solution(zip_files, config):
+    """
+    Submit multiple ZIP files via the OIOIOI API.
+    Each ZIP file is submitted under its respective key (e.g., "file", "file2").
+    """
+    url = f"{OIOIOI_BASE_URL}/api/c/{config['contest']}/submit/{config['problem_short_name']}"
     headers = {
         "Authorization": f"token {OIOIOI_API_TOKEN}"
     }
-    files = {'file': (zip_filename, open(zip_filename, 'rb')),
-             'file2': (zip_filename, open(zip_filename, 'rb'))}
-    
+
+    # Prepare files for submission
+    files = {}
+    for i, zip_file in enumerate(zip_files):
+        file_key = f"file{i + 1}"  # file1, file2, etc.
+        files[file_key] = (os.path.basename(zip_file), open(zip_file, 'rb'))
+
+    # Submit the solution
     response = requests.post(url, headers=headers, files=files)
-    
+
+    # Close the opened file handles
+    for file in files.values():
+        file[1].close()
+
     if response.status_code == 200:
-        submission_id = response.text
-        message = "Submission successful: " + submission_id
+        submission_id = response.text.strip()
+        message = (
+            f"✅ *Submission Accepted*\n"
+            f"• *Branch*: `{config['branches']}`\n"
+            f"• *Submission ID*: `{submission_id}`\n"
+            f"• Waiting for results..."
+        )
         print(message)
         send_telegram_message(message)
         return submission_id
     else:
-        message = f"Submission failed: {response.status_code}\n{response.text}"
+        message = f"❌ *Submission Failed*\nStatus Code: {response.status_code}\nResponse: {response.text}"
         print(message)
         send_telegram_message(message)
         return None
@@ -376,26 +406,17 @@ def main():
                     save_last_commits(last_commit_per_branch)
                     continue
 
-                # Create zip file based on include paths
-                zip_filename = create_zip_file(config)
+                # Create ZIP files based on include paths
+                zip_files = create_zip_files(config)
 
                 # Submit the solution and retrieve the submission ID
-                submission_id = submit_solution(zip_filename, config)
+                submission_id = submit_solution(zip_files, config)
                 if submission_id:
-                    message = (
-                        f"✅ *Submission Accepted*\n"
-                        f"• *Branch*: `{branch}`\n"
-                        f"• *Submission ID*: `{submission_id}`\n"
-                        f"• Waiting for results..."
-                    )
-                    print(message)
-                    send_telegram_message(message)
-
-                    # Wait for and fetch the results of the submission
-                    wait_for_results(session, config['contest'], submission_id)
+                    wait_for_results(session, config["contest"], submission_id)
 
                 # Clean up
-                os.remove(zip_filename)
+                for zip_file in zip_files:
+                    os.remove(zip_file)
 
                 # Update the last processed commit for this branch and save to file
                 last_commit_per_branch[branch] = current_commit
