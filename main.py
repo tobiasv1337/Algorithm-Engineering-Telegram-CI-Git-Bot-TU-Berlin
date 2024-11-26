@@ -48,20 +48,45 @@ def save_last_commits(last_commit_per_branch):
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
 def send_telegram_message(message, parse_mode="Markdown", disable_web_page_preview=True):
-    """Send a message to the Telegram group. Automatically splits long messages if needed."""
+    """
+    Send a message to the Telegram group. Automatically splits long messages if needed.
+    Splits at newline characters when possible.
+    """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     max_length = 4096  # Telegram's maximum message length
 
-    # Split message into smaller chunks if it's too long
-    if len(message) > max_length:
-        split_messages = [message[i:i + max_length] for i in range(0, len(message), max_length)]
-    else:
-        split_messages = [message]
+    def split_message_by_newline(message, max_length):
+        """
+        Split the message at newline characters, ensuring no part exceeds max_length.
+        """
+        if len(message) <= max_length:
+            return [message]
 
+        parts = []
+        current_part = ""
+
+        for line in message.split("\n"):
+            # If adding the current line exceeds the limit, finalize the current part
+            if len(current_part) + len(line) + 1 > max_length:
+                parts.append(current_part.strip())
+                current_part = ""
+
+            current_part += line + "\n"
+
+        # Append any remaining text as the last part
+        if current_part:
+            parts.append(current_part.strip())
+
+        return parts
+
+    # Split message using the newline-aware function
+    split_messages = split_message_by_newline(message, max_length)
+
+    # Send each part as a separate Telegram message
     for part in split_messages:
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": part,
+            "text": part.strip(),
             "parse_mode": parse_mode,  # Pass the parse mode as a parameter
             "disable_web_page_preview": disable_web_page_preview  # Pass link preview toggle
         }
@@ -350,16 +375,13 @@ def format_results_message(grouped_results, results_url):
     summary = f"📊 *Final Summary*\n\n" \
               f"• Total Groups: {len(grouped_results)}\n" \
               f"• Overall Score: {total_score:.2f}\n\n" \
-              f"📥 [View Full Results Here]({results_url})"  # Add the link again here
+              f"📥 [View Full Results Here]({results_url})"
     messages.append(summary)
-
-    # Add the link to the very end of the last message explicitly
-    messages[-1] += f"\n\n📥 [View Full Results Here]({results_url})"
 
     return messages
 
 
-def wait_for_results(session, contest_id, submission_id, check_interval=30):
+def wait_for_results(session, contest_id, submission_id, check_interval=10):
     """
     Poll the results page periodically and send structured results to Telegram.
     Splits messages into header, per-group details, and a summary, with a link in the last message.
