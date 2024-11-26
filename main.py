@@ -442,7 +442,7 @@ def wait_for_results(session, contest_id, submission_id, check_interval=30):
 def compare_results(contest_id, grouped_results):
     """
     Compare current results with historical data and generate a detailed summary.
-    Handles cases where results are an error message instead of grouped test data.
+    Includes changes in solved tests, runtime improvements, and group-specific details.
     """
     history = load_submission_history()
 
@@ -482,7 +482,7 @@ def compare_results(contest_id, grouped_results):
         summary.append(f"• *Total Successful Tests*: {current_successful}")
         summary.append(f"• *Runtime*: {'Faster' if diff_runtime < 0 else 'Slower'} by {abs(diff_runtime):.2f}s")
 
-        # Compare the last solved test in each group
+        # Compare each group for test and runtime changes
         for group, current_group_data in grouped_results.items():
             current_tests = current_group_data["tests"]
             last_solved_test = max(
@@ -501,14 +501,22 @@ def compare_results(contest_id, grouped_results):
                             f"🟢 Group {group}: Improved. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
                         )
-                    elif last_solved_test["test_name"] < prev_last_solved_test["test_name"]:
+                    # Same last solved test: Compare runtime
+                    elif last_solved_test["test_name"] == prev_last_solved_test["test_name"]:
+                        current_runtime = parse_numeric_value(last_solved_test["runtime"])
+                        prev_runtime = parse_numeric_value(prev_last_solved_test["runtime"])
+                        runtime_diff = prev_runtime - current_runtime
+
+                        test_group_changes.append(f"🟡 Group {group}: Same last solved test `{last_solved_test['test_name']}`.")
+                        test_group_changes.append(
+                            f"  {'🟢' if runtime_diff > 0 else '🔴'} Runtime {'improved' if runtime_diff > 0 else 'regressed'} "
+                            f"by {abs(runtime_diff):.2f}s."
+                        )
+                    # Fewer tests solved: Mark with red dot
+                    else:
                         test_group_changes.append(
                             f"🔴 Group {group}: Regressed. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
-                        )
-                    else:
-                        test_group_changes.append(
-                            f"ℹ️ Group {group}: No change. Last solved test: `{last_solved_test['test_name']}`"
                         )
                 else:
                     test_group_changes.append(
@@ -519,7 +527,6 @@ def compare_results(contest_id, grouped_results):
                     test_group_changes.append(
                         f"🟢 Group {group}: New group solved. Last solved test: `{last_solved_test['test_name']}`"
                     )
-
     else:
         # No previous submission data exists
         summary.append(f"🆕 *First Submission*: {current_successful} tests passed.")
