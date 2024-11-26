@@ -593,6 +593,30 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
     send_telegram_message(summary_message)
 
 
+def perform_auto_merge(branch):
+    """
+    Automatically merge the specified branch into `main` after successful testing.
+    """
+    try:
+        # Step 1: Checkout the main branch
+        subprocess.run(["git", "-C", REPO_PATH, "checkout", "main"], check=True)
+
+        # Step 2: Merge the target branch into main
+        subprocess.run(["git", "-C", REPO_PATH, "merge", branch], check=True)
+
+        # Step 3: Push the merged changes to the remote
+        subprocess.run(["git", "-C", REPO_PATH, "push", "origin", "main"], check=True)
+
+        # Send Telegram notification about success
+        send_telegram_message(f"✅ *Auto-Merge Successful*\n"
+                              f"Branch `{branch}` was successfully merged into `main`.")
+    except subprocess.CalledProcessError as e:
+        # Handle merge errors and notify via Telegram
+        send_telegram_message(f"❌ *Auto-Merge Failed*\n"
+                              f"Error during merging branch `{branch}` into `main`.\n"
+                              f"Details: {str(e)}")
+
+
 def main():
     global shutdown_flag
     global last_commit_per_branch
@@ -665,6 +689,23 @@ def main():
                 submission_id = submit_solution(zip_files, config)
                 if submission_id:
                     wait_for_results(session, config["contest_id"], submission_id)
+
+                    # Check if this branch should trigger an auto-merge
+                    if branch == config.get("auto_merge_branch"):
+                        grouped_results = fetch_test_results(session, config["contest_id"], submission_id)
+
+                        # Ensure all tests passed before merging
+                        if grouped_results and all(
+                            test["result"].lower() == "ok"
+                            for group in grouped_results.values()
+                            for test in group["tests"]
+                        ):
+                            perform_auto_merge(branch)
+                        else:
+                            send_telegram_message(
+                                f"⚠️ *Auto-Merge Skipped*\n"
+                                f"Branch `{branch}` was not merged into `main` due to test failures."
+                            )
 
                 # Clean up
                 for zip_file in zip_files:
