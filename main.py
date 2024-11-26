@@ -64,7 +64,7 @@ def save_submission_history(history):
 def escape_markdown(text, exclude=None):
     """Escape special characters in text for Telegram Markdown while preserving formatting."""
     if exclude is None:
-        exclude = set('*_`')  # Allow bold, italic, and inline code
+        exclude = set('*')  # Allow bold
     escape_chars = '_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars and char not in exclude else char for char in text)
 
@@ -101,7 +101,7 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
         return parts
 
     # Escape special characters while keeping bold and italic
-    escaped_message = escape_markdown(message, exclude={'*', '_', '`'})
+    escaped_message = escape_markdown(message, exclude={'*'})
 
     # Split message using the newline-aware function
     split_messages = split_message_by_newline(escaped_message, max_length)
