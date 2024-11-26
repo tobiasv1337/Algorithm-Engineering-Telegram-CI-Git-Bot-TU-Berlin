@@ -66,7 +66,7 @@ def escape_markdown(text):
     escape_chars = '_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
-def send_telegram_message(message, parse_mode="Markdown", disable_web_page_preview=True):
+def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_preview=True):
     """
     Send a message to the Telegram group. Automatically splits long messages if needed.
     Splits at newline characters when possible.
