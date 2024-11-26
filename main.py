@@ -379,7 +379,7 @@ def format_results_message(grouped_results, results_url):
 
         for test in data["tests"]:
             # Highlight successful tests in green and failed tests in red
-            test_status = "🟢" if test["result"].lower() == "ok" else "🟡" if test["result"].lower() == "skipped" else "🔴"
+            test_status = "🟢" if test["result"].lower() == "ok" else "⚪️" if test["result"].lower() == "skipped" else "🔴"
 
             # Ensure the runtime format is consistent (removing unnecessary newlines)
             runtime = test["runtime"].replace("\n", " ").strip()
@@ -427,6 +427,9 @@ def main():
 
     session = login_to_oioioi()  # Login to OIOIOI and get a session
     print("Logged into OIOIOI successfully.")
+
+    wait_for_results(session, "vc2", 187)
+    return
 
     while not shutdown_flag:
         fetch_all_branches()
