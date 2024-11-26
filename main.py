@@ -14,7 +14,7 @@ load_dotenv()
 
 # Configuration
 CHECK_INTERVAL = 10  # Check every 10 seconds
-REPO_PATH = "/home/contestbot/test"  # Set your repository path here
+REPO_PATH = "/home/contestbot/vertex_cover"  # Set your repository path here
 OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
 OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
 OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
