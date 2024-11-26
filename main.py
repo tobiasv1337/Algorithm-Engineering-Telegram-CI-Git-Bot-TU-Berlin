@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import re
 import signal
 import subprocess
 import requests
@@ -20,18 +21,19 @@ OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
 OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env file
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
+SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
 
 # Global variable to track requested shutdown
 shutdown_flag = False
 
-# Graceful shutdown handler
 def handle_shutdown_signal(signum, frame):
+    """Signal handler to stop the script gracefully."""
     global shutdown_flag
     print(f"\nSignal {signum} received. Shutting down gracefully...")
     shutdown_flag = True
 
-# Load last processed commit hashes from file
 def load_last_commits():
     """Load the last processed commit hashes from a file."""
     if os.path.exists(LAST_COMMITS_FILE):
@@ -39,13 +41,24 @@ def load_last_commits():
             return json.load(f)
     return {}
 
-# Save last processed commit hashes to file
 def save_last_commits(last_commit_per_branch):
     """Save the last processed commit hashes to a file."""
     with open(LAST_COMMITS_FILE, 'w') as f:
         json.dump(last_commit_per_branch, f)
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
+
+def load_submission_history():
+    """Load historical submission data from a file."""
+    if os.path.exists(SUBMISSION_HISTORY_FILE):
+        with open(SUBMISSION_HISTORY_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_submission_history(history):
+    """Save historical submission data to a file."""
+    with open(SUBMISSION_HISTORY_FILE, 'w') as f:
+        json.dump(history, f, indent=4)
 
 def send_telegram_message(message, parse_mode="Markdown", disable_web_page_preview=True):
     """
@@ -287,6 +300,21 @@ def login_to_oioioi():
 
     return session
 
+def parse_numeric_value(value):
+    """
+    Extract the numeric part from a string value.
+    Removes non-numeric characters like 's' or spaces.
+    """
+    try:
+        # Remove non-numeric characters except dots and slashes
+        cleaned_value = re.sub(r"[^\d./]", "", value.strip())
+        # Handle cases like "0.00 / 120.00"
+        if "/" in cleaned_value:
+            cleaned_value = cleaned_value.split("/")[0]
+        return float(cleaned_value)
+    except (ValueError, IndexError):
+        return 0.0  # Return 0.0 if conversion fails
+
 def fetch_test_results(session, contest_id, submission_id):
     """Fetch and parse the test results or error messages from the HTML report."""
     url = f"{OIOIOI_BASE_URL}/c/{contest_id}/get_report_HTML/{submission_id}/"
@@ -314,8 +342,7 @@ def fetch_test_results(session, contest_id, submission_id):
             if len(cells) > 1:
                 test_name = cells[1].text.strip()
                 result = cells[2].text.strip()
-                runtime = cells[3].text.strip()
-                score = cells[4].text.strip() if len(cells) > 4 else "0.0"
+                runtime = parse_numeric_value(cells[3].text)  # Extract numeric runtime
 
                 # Extract group key (first number from test name)
                 group_key = test_name.split()[0][0]  # Extract the first number
@@ -334,15 +361,13 @@ def fetch_test_results(session, contest_id, submission_id):
                 grouped_results[group_key]["tests"].append({
                     "test_name": test_name,
                     "result": result,
-                    "runtime": runtime,
-                    "score": score
+                    "runtime": f"{runtime:.2f}s",  # Format runtime as a string
                 })
 
                 # Add to the total score for the group
-                try:
-                    grouped_results[group_key]["total_score"] += float(score.split()[0])
-                except ValueError:
-                    pass  # Skip invalid score entries
+                if len(cells) > 4:
+                    score = parse_numeric_value(cells[4].text)  # Extract numeric score
+                    grouped_results[group_key]["total_score"] += score
 
         return grouped_results
     except Exception as e:
@@ -401,25 +426,65 @@ def format_results_message(grouped_results, results_url):
     return messages
 
 
-def wait_for_results(session, contest_id, submission_id, check_interval=10):
-    """
-    Poll the results page periodically and send structured results to Telegram.
-    Splits messages into header, per-group details, and a summary, with a link in the last message.
-    """
-    results_url = f"{OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
-
+def wait_for_results(session, contest_id, submission_id, check_interval=30):
+    """Poll the results page periodically and send grouped results to Telegram."""
     while True:
         grouped_results = fetch_test_results(session, contest_id, submission_id)
         if grouped_results:
-            # Format and send results
-            messages = format_results_message(grouped_results, results_url)
-
-            for msg in messages:
-                send_telegram_message(msg)
+            results_url = f"{OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
+            send_results_summary_to_telegram(contest_id, grouped_results, results_url)
             break
         else:
             print("Results not available yet. Checking again in a few seconds...")
             time.sleep(check_interval)
+
+
+def compare_results(contest_id, grouped_results):
+    """Compare current results with historical data and generate a summary."""
+    history = load_submission_history()
+    current_successful = sum(1 for group in grouped_results.values() for test in group["tests"] if test["result"].lower() == "ok")
+    current_runtime = sum(parse_numeric_value(test["runtime"]) for group in grouped_results.values() for test in group["tests"])
+
+    summary = []
+    if contest_id in history:
+        prev_data = history[contest_id]
+        prev_successful = prev_data["successful_tests"]
+        prev_runtime = prev_data["total_runtime"]
+
+        # Calculate differences
+        diff_successful = current_successful - prev_successful
+        diff_runtime = current_runtime - prev_runtime
+
+        summary.append(f"✅ Successful Tests: {'+' if diff_successful > 0 else ''}{diff_successful} (Total: {current_successful})")
+        summary.append(f"⏱ Runtime: {'-' if diff_runtime < 0 else '+'}{abs(diff_runtime):.2f}s ({'Faster' if diff_runtime < 0 else 'Slower'})")
+    else:
+        summary.append(f"✅ Successful Tests: {current_successful}")
+        summary.append(f"⏱ Runtime: {current_runtime:.2f}s")
+
+    # Update history
+    history[contest_id] = {
+        "successful_tests": current_successful,
+        "total_runtime": current_runtime,
+        "timestamp": time.time()
+    }
+    save_submission_history(history)
+
+    return "\n".join(summary)
+
+
+def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
+    """Send a detailed summary of improvements and results via Telegram."""
+    improvement_summary = compare_results(contest_id, grouped_results)
+    messages = format_results_message(grouped_results, results_url)
+
+    # Add improvement summary as the first message
+    summary_message = f"🚀 *Improvement Summary*:\n{improvement_summary}\n\n📥 [View Full Results Here]({results_url})"
+    send_telegram_message(summary_message)
+
+    # Send detailed test results
+    for message in messages:
+        send_telegram_message(message)
+
 
 def main():
     global shutdown_flag
