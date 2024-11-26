@@ -158,18 +158,22 @@ def submit_solution(zip_filename, config):
     headers = {
         "Authorization": f"token {OIOIOI_API_TOKEN}"
     }
-    files = {'file': (zip_filename, open(zip_filename, 'rb'))}
+    files = {'file': (zip_filename, open(zip_filename, 'rb')),
+             'file2': (zip_filename, open(zip_filename, 'rb'))}
     
     response = requests.post(url, headers=headers, files=files)
     
     if response.status_code == 200:
-        message = "Submission successful."
+        submission_id = response.text
+        message = "Submission successful: " + submission_id
         print(message)
         send_telegram_message(message)
+        return submission_id
     else:
         message = f"Submission failed: {response.status_code}\n{response.text}"
         print(message)
         send_telegram_message(message)
+        return None
 
 def main():
     global shutdown_flag
