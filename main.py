@@ -307,6 +307,9 @@ def main():
     global shutdown_flag
     global last_commit_per_branch
 
+    session = login_to_oioioi()  # Login to OIOIOI and get a session
+    print("Logged into OIOIOI successfully.")
+
     while not shutdown_flag:
         fetch_all_branches()
 
@@ -328,7 +331,7 @@ def main():
 
                 # Load the config file from this specific commit
                 config = load_config_from_commit(current_commit)
-                
+
                 # Skip if config is missing or AUTOCOMMIT is not enabled
                 if not config or not config.get("AUTOCOMMIT", False):
                     message = "AUTOCOMMIT is disabled or config is missing. Skipping submission."
@@ -349,13 +352,20 @@ def main():
 
                 # Create zip file based on include paths
                 zip_filename = create_zip_file(config)
-                
-                # Submit the solution
-                submit_solution(zip_filename, config)
-                
+
+                # Submit the solution and retrieve the submission ID
+                submission_id = submit_solution(zip_filename, config)
+                if submission_id:
+                    message = f"Submission {submission_id} accepted. Waiting for results..."
+                    print(message)
+                    send_telegram_message(message)
+
+                    # Wait for and fetch the results of the submission
+                    wait_for_results(session, submission_id)
+
                 # Clean up
                 os.remove(zip_filename)
-                
+
                 # Update the last processed commit for this branch and save to file
                 last_commit_per_branch[branch] = current_commit
                 save_last_commits(last_commit_per_branch)
