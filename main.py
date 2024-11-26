@@ -61,6 +61,11 @@ def save_submission_history(history):
     with open(SUBMISSION_HISTORY_FILE, 'w') as f:
         json.dump(history, f, indent=4)
 
+def escape_markdown(text):
+    """Escape special characters in text for Telegram Markdown."""
+    escape_chars = '_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+
 def send_telegram_message(message, parse_mode="Markdown", disable_web_page_preview=True):
     """
     Send a message to the Telegram group. Automatically splits long messages if needed.
@@ -92,6 +97,9 @@ def send_telegram_message(message, parse_mode="Markdown", disable_web_page_previ
             parts.append(current_part.strip())
 
         return parts
+
+    # Escape special characters for Telegram Markdown
+    message = escape_markdown(message)
 
     # Split message using the newline-aware function
     split_messages = split_message_by_newline(message, max_length)
