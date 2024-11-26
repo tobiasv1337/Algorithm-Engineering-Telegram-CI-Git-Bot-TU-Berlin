@@ -469,7 +469,7 @@ def compare_results(contest_id, grouped_results):
     }
     save_submission_history(history)
 
-    return summary
+    return "\n".join(summary)
 
 
 def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
