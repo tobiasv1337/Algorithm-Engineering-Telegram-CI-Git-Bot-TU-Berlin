@@ -4,6 +4,7 @@ import json
 import signal
 import subprocess
 import requests
+from bs4 import BeautifulSoup
 from zipfile import ZipFile
 from dotenv import load_dotenv
 
@@ -13,6 +14,9 @@ load_dotenv()
 # Configuration
 CHECK_INTERVAL = 10  # Check every 10 seconds
 REPO_PATH = "/home/contestbot/test"  # Set your repository path here
+OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
+OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
+OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
 OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env file
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -174,6 +178,130 @@ def submit_solution(zip_filename, config):
         print(message)
         send_telegram_message(message)
         return None
+
+def login_to_oioioi():
+    """
+    Log in to OIOIOI using the navbar login form.
+    Fetches the CSRF token from the main page and performs the login.
+    """
+    main_page_url = f"{OIOIOI_BASE_URL}/"
+    login_url = f"{OIOIOI_BASE_URL}/login/"
+    session = requests.Session()
+
+    # Step 1: Load the main page to fetch the CSRF token
+    main_page = session.get(main_page_url, headers={"User-Agent": "Mozilla/5.0"})
+    if main_page.status_code != 200:
+        raise Exception(f"Failed to fetch the main page. Status code: {main_page.status_code}")
+
+    # Parse the CSRF token
+    soup = BeautifulSoup(main_page.content, "html.parser")
+    csrf_token = soup.find("input", {"name": "csrfmiddlewaretoken"})
+    csrf_token_value = csrf_token["value"] if csrf_token else None
+    if not csrf_token_value:
+        raise Exception("CSRF token not found on the main page.")
+
+    # Step 2: Perform the login
+    payload = {
+        "csrfmiddlewaretoken": csrf_token_value,
+        "auth-username": OIOIOI_USERNAME,
+        "auth-password": OIOIOI_PASSWORD,
+        "login_view-current_step": "auth",
+    }
+    headers = {
+        "Referer": main_page_url,
+        "Origin": OIOIOI_BASE_URL,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0",
+    }
+
+    response = session.post(login_url, data=payload, headers=headers)
+    if response.status_code != 200 or "Log out" not in response.text:
+        raise Exception(f"Login failed. Status code: {response.status_code}")
+
+    return session
+
+def fetch_test_results(session, submission_id):
+    """Fetch and parse the test results from the HTML report."""
+    url = f"{OIOIOI_BASE_URL}/c/vc2/get_report_HTML/{submission_id}/"
+    try:
+        response = session.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Parse test results grouped by the first number in the test name
+        rows = soup.select('table.table-report tbody tr')
+        grouped_results = {}
+        for row in rows:
+            cells = row.find_all('td')
+            if len(cells) > 1:
+                test_name = cells[1].text.strip()
+                result = cells[2].text.strip()
+                runtime = cells[3].text.strip()
+                score = cells[4].text.strip() if len(cells) > 4 else "0.0"
+
+                # Extract group key (first number from test name)
+                group_key = test_name.split()[0][0]  # Extract the first number
+                if group_key.isdigit():
+                    group_key = int(group_key)
+                else:
+                    group_key = "Other"  # Catch-all for ungrouped tests
+
+                # Add to grouped results
+                if group_key not in grouped_results:
+                    grouped_results[group_key] = {
+                        "tests": [],
+                        "total_score": 0.0
+                    }
+
+                grouped_results[group_key]["tests"].append({
+                    "test_name": test_name,
+                    "result": result,
+                    "runtime": runtime,
+                    "score": score
+                })
+
+                # Add to the total score for the group
+                try:
+                    grouped_results[group_key]["total_score"] += float(score.split()[0])
+                except ValueError:
+                    pass  # Skip invalid score entries
+
+        return grouped_results
+    except Exception as e:
+        print(f"Error fetching or parsing results: {e}")
+        return None
+
+
+def format_results_message(grouped_results):
+    """Format the grouped test results into a human-readable message."""
+    if not grouped_results:
+        return "No results available yet."
+
+    message = "Test Results:\n"
+    for group, data in sorted(grouped_results.items()):
+        message += f"Group {group}:\n"
+        for test in data["tests"]:
+            message += f"  Test: {test['test_name']}\n"
+            message += f"    Result: {test['result']}\n"
+            message += f"    Runtime: {test['runtime']}\n"
+            message += f"    Score: {test['score']}\n"
+        message += f"  Total Group Score: {data['total_score']}\n\n"
+
+    return message
+
+
+def wait_for_results(session, submission_id, check_interval=30):
+    """Poll the results page periodically and send grouped results to Telegram."""
+    while True:
+        grouped_results = fetch_test_results(session, submission_id)
+        if grouped_results:
+            message = format_results_message(grouped_results)
+            print(message)
+            send_telegram_message(message)
+            break
+        else:
+            print("Results not available yet. Checking again in a few seconds...")
+            time.sleep(check_interval)
 
 def main():
     global shutdown_flag
