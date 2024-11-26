@@ -496,19 +496,31 @@ def compare_results(contest_id, grouped_results):
 
                 # Check cases for improvement, regression, or no changes
                 if last_solved_test and prev_last_solved_test:
-                    if last_solved_test["test_name"] > prev_last_solved_test["test_name"]:
+                    if last_solved_test["test_name"] == prev_last_solved_test["test_name"]:
+                        # Same last solved test: Compare runtime
+                        prev_runtime = parse_numeric_value(prev_last_solved_test["runtime"])
+                        current_runtime = parse_numeric_value(last_solved_test["runtime"])
+
+                        if current_runtime < prev_runtime:
+                            runtime_status = "🟢 Faster"
+                        elif current_runtime > prev_runtime:
+                            runtime_status = "🔴 Slower"
+                        else:
+                            runtime_status = "🟡 No Change"
+
+                        test_group_changes.append(
+                            f"🟡 Group {group}: Same last solved test `{last_solved_test['test_name']}`.\n"
+                            f"   Runtime comparison: {runtime_status} ({prev_runtime:.2f}s → {current_runtime:.2f}s)"
+                        )
+                    elif last_solved_test["test_name"] > prev_last_solved_test["test_name"]:
                         test_group_changes.append(
                             f"🟢 Group {group}: Improved. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
                         )
-                    elif last_solved_test["test_name"] < prev_last_solved_test["test_name"]:
+                    else:
                         test_group_changes.append(
                             f"🔴 Group {group}: Regressed. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
-                        )
-                    else:
-                        test_group_changes.append(
-                            f"🟡 Group {group}: No Changes. Last solved test: `{last_solved_test['test_name']}`"
                         )
                 elif not last_solved_test and not prev_last_solved_test:
                     # No tests solved in either the current or previous submission
@@ -587,9 +599,6 @@ def main():
 
     session = login_to_oioioi()  # Login to OIOIOI and get a session
     print("Logged into OIOIOI successfully.")
-
-    wait_for_results(session, "vc1", 158)
-    return
 
     while not shutdown_flag:
         fetch_all_branches()
