@@ -354,22 +354,32 @@ def format_results_message(grouped_results, results_url):
     header = f"✅ *Test Results Overview*\n\n" \
              f"• Total Groups: {len(grouped_results)}\n" \
              f"• Overall Score: {total_score:.2f}\n\n" \
-             f"Detailed Results:\n" \
-             f"\n📥 [View Full Results Here]({results_url})"
+             f"📥 [View Full Results Here]({results_url})"
     messages.append(header)
 
     # Detailed results per group
     for group, data in sorted(grouped_results.items()):
         group_message = f"📂 *Group {group}*\n" \
-                        f"• Total Score: {data['total_score']:.2f}\n\n"
+                        f"• Total Group Score: {data['total_score']:.2f}\n\n"
+
         for test in data["tests"]:
+            # Highlight successful tests in green and failed tests in red
+            test_status = "🟢" if test["result"].lower() == "success" else "🔴"
+
+            # Ensure the runtime format is consistent (removing unnecessary newlines)
+            runtime = test["runtime"].replace("\n", " ").strip()
+
             group_message += (
-                f"🔹 *Test*: {test['test_name']}\n"
-                f"  • Result: {test['result']}\n"
-                f"  • Runtime: {test['runtime']}\n"
-                f"  • Score: {test['score']}\n\n"
+                f"{test_status} *{test['test_name']}* | ⏱ {runtime} | Result: {test['result']}\n"
             )
-        messages.append(group_message)
+
+        # Ensure no single message exceeds Telegram's 4096-character limit
+        if len(group_message) > 4000:
+            messages.append(group_message.strip())
+            group_message = ""
+
+        if group_message:
+            messages.append(group_message.strip())
 
     # Final summary with the link at the end
     summary = f"📊 *Final Summary*\n\n" \
