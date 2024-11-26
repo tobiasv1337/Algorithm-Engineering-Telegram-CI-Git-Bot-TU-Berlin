@@ -596,22 +596,43 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
 def perform_auto_merge(branch):
     """
     Automatically merge the specified branch into `main` after successful testing.
+    Only performs the merge if there are no conflicts.
     """
     try:
         # Step 1: Checkout the main branch
         subprocess.run(["git", "-C", REPO_PATH, "checkout", "main"], check=True)
 
-        # Step 2: Merge the target branch into main
-        subprocess.run(["git", "-C", REPO_PATH, "merge", branch], check=True)
+        # Step 2: Merge the target branch into main with --no-commit and --no-ff to detect conflicts
+        merge_result = subprocess.run(
+            ["git", "-C", REPO_PATH, "merge", "--no-commit", "--no-ff", branch],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
-        # Step 3: Push the merged changes to the remote
+        # Check for conflicts
+        if "CONFLICT" in merge_result.stderr:
+            send_telegram_message(
+                f"⚠️ *Merge Conflict Detected*\n"
+                f"Branch `{branch}` could not be merged into `main` due to conflicts.\n"
+                f"Details:\n```\n{merge_result.stderr.strip()}\n```"
+            )
+
+            # Abort the merge
+            subprocess.run(["git", "-C", REPO_PATH, "merge", "--abort"], check=True)
+            return
+
+        # Step 3: Commit and complete the merge if no conflicts
+        subprocess.run(["git", "-C", REPO_PATH, "commit", "-m", f"Merge branch '{branch}' into main"], check=True)
+
+        # Step 4: Push the merged changes to the remote
         subprocess.run(["git", "-C", REPO_PATH, "push", "origin", "main"], check=True)
 
         # Send Telegram notification about success
         send_telegram_message(f"✅ *Auto-Merge Successful*\n"
                               f"Branch `{branch}` was successfully merged into `main`.")
     except subprocess.CalledProcessError as e:
-        # Handle merge errors and notify via Telegram
+        # Handle unexpected errors during merge and notify via Telegram
         send_telegram_message(f"❌ *Auto-Merge Failed*\n"
                               f"Error during merging branch `{branch}` into `main`.\n"
                               f"Details: {str(e)}")
