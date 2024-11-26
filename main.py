@@ -461,7 +461,6 @@ def compare_results(contest_id, grouped_results):
     summary = []
     test_group_changes = []
 
-    # Check if there is a previous submission history for this contest
     if contest_id in history:
         prev_data = history[contest_id]
         prev_successful = prev_data["successful_tests"]
@@ -477,56 +476,62 @@ def compare_results(contest_id, grouped_results):
         elif diff_successful < 0:
             summary.append(f"⚠️ *Regression*: {abs(diff_successful)} fewer tests passed.")
         else:
-            summary.append(f"ℹ️ *No Change*: The same number of tests passed.")
+            summary.append(f"ℹ️ *No Changes*: The same number of tests passed.")
 
         summary.append(f"• *Total Successful Tests*: {current_successful}")
         summary.append(f"• *Runtime*: {'Faster' if diff_runtime < 0 else 'Slower'} by {abs(diff_runtime):.2f}s")
 
-        # Compare each group for test and runtime changes
+        # Compare the last solved test in each group
         for group, current_group_data in grouped_results.items():
             current_tests = current_group_data["tests"]
             last_solved_test = max(
                 (test for test in current_tests if test["result"].lower() == "ok"),
                 key=lambda x: x["test_name"],
-                default=None,
+                default=None
             )
 
             # Check if this group existed in the previous results
             if str(group) in prev_group_results:
                 prev_last_solved_test = prev_group_results[str(group)]["last_solved_test"]
 
-                if last_solved_test:
+                # Check cases for improvement, regression, or no changes
+                if last_solved_test and prev_last_solved_test:
                     if last_solved_test["test_name"] > prev_last_solved_test["test_name"]:
                         test_group_changes.append(
                             f"🟢 Group {group}: Improved. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
                         )
-                    # Same last solved test: Compare runtime
-                    elif last_solved_test["test_name"] == prev_last_solved_test["test_name"]:
-                        current_runtime = parse_numeric_value(last_solved_test["runtime"])
-                        prev_runtime = parse_numeric_value(prev_last_solved_test["runtime"])
-                        runtime_diff = prev_runtime - current_runtime
-
-                        test_group_changes.append(f"🟡 Group {group}: Same last solved test `{last_solved_test['test_name']}`.")
-                        test_group_changes.append(
-                            f"  {'🟢' if runtime_diff > 0 else '🔴'} Runtime {'improved' if runtime_diff > 0 else 'regressed'} "
-                            f"by {abs(runtime_diff):.2f}s."
-                        )
-                    # Fewer tests solved: Mark with red dot
-                    else:
+                    elif last_solved_test["test_name"] < prev_last_solved_test["test_name"]:
                         test_group_changes.append(
                             f"🔴 Group {group}: Regressed. "
                             f"Last solved test: `{prev_last_solved_test['test_name']}` → `{last_solved_test['test_name']}`"
                         )
+                    else:
+                        test_group_changes.append(
+                            f"🟡 Group {group}: No Changes. Last solved test: `{last_solved_test['test_name']}`"
+                        )
+                elif not last_solved_test and not prev_last_solved_test:
+                    # No tests solved in either the current or previous submission
+                    test_group_changes.append(
+                        f"🟡 Group {group}: No Changes. No tests solved in either submission."
+                    )
+                elif last_solved_test:
+                    # New tests solved in this submission but none previously
+                    test_group_changes.append(
+                        f"🟢 Group {group}: Improved. Last solved test: `{last_solved_test['test_name']}`"
+                    )
                 else:
+                    # No tests solved in this submission but there were previously
                     test_group_changes.append(
                         f"🔴 Group {group}: Regressed. No tests solved in the latest submission."
                     )
             else:
+                # No previous data for this group
                 if last_solved_test:
                     test_group_changes.append(
                         f"🟢 Group {group}: New group solved. Last solved test: `{last_solved_test['test_name']}`"
                     )
+
     else:
         # No previous submission data exists
         summary.append(f"🆕 *First Submission*: {current_successful} tests passed.")
@@ -538,7 +543,7 @@ def compare_results(contest_id, grouped_results):
             "last_solved_test": max(
                 (test for test in data["tests"] if test["result"].lower() == "ok"),
                 key=lambda x: x["test_name"],
-                default=None,
+                default=None
             )
         }
         for group, data in grouped_results.items()
@@ -583,7 +588,7 @@ def main():
     session = login_to_oioioi()  # Login to OIOIOI and get a session
     print("Logged into OIOIOI successfully.")
 
-    wait_for_results(session, "vc2", 169)
+    wait_for_results(session, "vc1", 158)
     return
 
     while not shutdown_flag:
