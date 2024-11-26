@@ -174,9 +174,9 @@ def check_for_compiler_errors():
 def submit_solution(zip_files, config):
     """
     Submit multiple ZIP files via the OIOIOI API.
-    Each ZIP file is submitted under its respective key (e.g., "file", "file2").
+    The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
     """
-    url = f"{OIOIOI_BASE_URL}/api/c/{config['contest']}/submit/{config['problem_short_name']}"
+    url = f"{OIOIOI_BASE_URL}/api/c/{config['contest_id']}/submit/{config['problem_short_name']}"
     headers = {
         "Authorization": f"token {OIOIOI_API_TOKEN}"
     }
@@ -184,7 +184,7 @@ def submit_solution(zip_files, config):
     # Prepare files for submission
     files = {}
     for i, zip_file in enumerate(zip_files):
-        file_key = f"file{i + 1}"  # file1, file2, etc.
+        file_key = "file" if i == 0 else f"file{i + 1}"  # Name the first file as "file"
         files[file_key] = (os.path.basename(zip_file), open(zip_file, 'rb'))
 
     # Submit the solution
@@ -412,7 +412,7 @@ def main():
                 # Submit the solution and retrieve the submission ID
                 submission_id = submit_solution(zip_files, config)
                 if submission_id:
-                    wait_for_results(session, config["contest"], submission_id)
+                    wait_for_results(session, config["contest_id"], submission_id)
 
                 # Clean up
                 for zip_file in zip_files:
