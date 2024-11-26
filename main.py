@@ -288,15 +288,26 @@ def login_to_oioioi():
     return session
 
 def fetch_test_results(session, contest_id, submission_id):
-    """Fetch and parse the test results from the HTML report."""
+    """Fetch and parse the test results or error messages from the HTML report."""
     url = f"{OIOIOI_BASE_URL}/c/{contest_id}/get_report_HTML/{submission_id}/"
     try:
         response = session.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
+        # Check if the report contains a results table
+        table = soup.select_one("table.table-report.submission")
+        if not table:
+            # If no table is present, check for error messages in the article
+            article = soup.find("article")
+            if article:
+                error_message = article.find("p").text.strip() if article.find("p") else "Unknown error."
+                additional_info = article.find("pre").text.strip() if article.find("pre") else ""
+                return {"error": f"{error_message}\n{additional_info}".strip()}
+            return None
+
         # Parse test results grouped by the first number in the test name
-        rows = soup.select('table.table-report tbody tr')
+        rows = table.select('tbody tr')
         grouped_results = {}
         for row in rows:
             cells = row.find_all('td')
@@ -341,11 +352,15 @@ def fetch_test_results(session, contest_id, submission_id):
 
 def format_results_message(grouped_results, results_url):
     """
-    Format the grouped test results into a structured multi-part message for Telegram.
-    Splits into a header, per-group messages, and a summary with a link to the results at the end.
+    Format the grouped test results or error messages into structured Telegram messages.
+    Splits into a header, per-group messages, and a summary with a link to the results.
     """
+
     if not grouped_results:
         return ["No results available yet."]
+
+    if "error" in grouped_results:
+        return [f"⚠️ *Error in test results*\n\n{grouped_results['error']}"]
 
     messages = []
 
@@ -364,7 +379,7 @@ def format_results_message(grouped_results, results_url):
 
         for test in data["tests"]:
             # Highlight successful tests in green and failed tests in red
-            test_status = "🟢" if test["result"].lower() == "success" else "🔴"
+            test_status = "🟢" if test["result"].lower() == "ok" else "🔴"
 
             # Ensure the runtime format is consistent (removing unnecessary newlines)
             runtime = test["runtime"].replace("\n", " ").strip()
@@ -372,11 +387,6 @@ def format_results_message(grouped_results, results_url):
             group_message += (
                 f"{test_status} *{test['test_name']}* | ⏱ {runtime} | Result: {test['result']}\n"
             )
-
-        # Ensure no single message exceeds Telegram's 4096-character limit
-        if len(group_message) > 4000:
-            messages.append(group_message.strip())
-            group_message = ""
 
         if group_message:
             messages.append(group_message.strip())
