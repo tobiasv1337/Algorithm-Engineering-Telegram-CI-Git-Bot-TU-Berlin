@@ -219,7 +219,7 @@ def check_for_compiler_errors():
         send_telegram_message(message)
         return False
 
-def submit_solution(zip_files, config):
+def submit_solution(zip_files, config, branch):
     """
     Submit multiple ZIP files via the OIOIOI API.
     The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
@@ -246,7 +246,7 @@ def submit_solution(zip_files, config):
         submission_id = response.text.strip()
         message = (
             f"✅ *Submission Accepted*\n"
-            f"• *Branch*: `{config['branches']}`\n"
+            f"• *Branch*: `{branch}`\n"
             f"• *Submission ID*: `{submission_id}`\n"
             f"• Waiting for results..."
         )
@@ -707,7 +707,7 @@ def main():
                 zip_files = create_zip_files(config)
 
                 # Submit the solution and retrieve the submission ID
-                submission_id = submit_solution(zip_files, config)
+                submission_id = submit_solution(zip_files, config, branch)
                 if submission_id:
                     wait_for_results(session, config["contest_id"], submission_id)
 
