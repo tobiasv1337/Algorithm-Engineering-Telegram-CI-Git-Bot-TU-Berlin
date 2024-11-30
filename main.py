@@ -181,15 +181,16 @@ def create_zip_files(config):
     """
     Create multiple ZIP files based on the `zip_files` configuration in the submission config.
     Allows specifying destination paths for files and folders within the ZIP.
-    Returns a list of created ZIP file paths.
+    Returns a list of created ZIP file paths and the temporary directory used.
     """
     zip_files = config.get("zip_files", [])
+    temp_dir = tempfile.TemporaryDirectory()  # Create a temporary directory for ZIP files
     created_files = []
 
     for zip_config in zip_files:
         zip_name = zip_config.get("zip_name", "submission.zip")
         include_paths = zip_config.get("include_paths", [])
-        zip_path = os.path.join(REPO_PATH, zip_name)
+        zip_path = os.path.join(temp_dir.name, zip_name)  # Place ZIP files in the temp directory
 
         with ZipFile(zip_path, 'w') as zipf:
             for path_mapping in include_paths:
@@ -222,26 +223,26 @@ def create_zip_files(config):
 
         created_files.append(zip_path)
 
-    return created_files
+    return created_files, temp_dir
 
 def check_for_compiler_errors(config):
     """
     Run a compilation check for each independent Rust project specified in the configuration.
     Creates ZIP files first, extracts them to temporary directories, and checks each project for compilation errors.
     """
-    zip_files = create_zip_files(config)  # Create ZIP files as specified in the configuration
+    zip_files, temp_dir = create_zip_files(config)  # Create ZIP files in a temporary directory
     all_projects_meet_criteria = True  # Track if all projects meet the specified criteria
 
     for zip_file in zip_files:
         # Create a temporary directory to extract the ZIP file
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir_extract:
             try:
                 # Extract the ZIP file
                 with ZipFile(zip_file, 'r') as zip_ref:
-                    zip_ref.extractall(temp_dir)
+                    zip_ref.extractall(temp_dir_extract)
 
                 # Run `cargo check` in the extracted directory
-                result = subprocess.run(["cargo", "check"], cwd=temp_dir, capture_output=True, text=True)
+                result = subprocess.run(["cargo", "check"], cwd=temp_dir_extract, capture_output=True, text=True)
 
                 # Check for errors
                 if result.returncode != 0:
@@ -271,12 +272,8 @@ def check_for_compiler_errors(config):
                 all_projects_meet_criteria = False  # Mark as not meeting criteria for any unexpected errors
                 break  # Exit the loop to clean up and return
 
-    # Clean up: remove the ZIP files after checks are done
-    for zip_file in zip_files:
-        try:
-            os.remove(zip_file)
-        except Exception as e:
-            print(f"⚠️ Could not delete ZIP file {zip_file}: {str(e)}")
+    # Clean up the temporary directory containing ZIP files (automatic with TemporaryDirectory)
+    temp_dir.cleanup()  # Explicitly clean up in case the temp dir is not automatically deleted
 
     return all_projects_meet_criteria  # Return True only if all projects meet the criteria
 
@@ -809,33 +806,34 @@ def main():
                     continue
 
                 # Create ZIP files based on include paths
-                zip_files = create_zip_files(config)
+                zip_files, temp_dir = create_zip_files(config)
 
-                # Submit the solution and retrieve the submission ID
-                submission_id = submit_solution(zip_files, config, branch)
-                if submission_id:
-                    wait_for_results(session, config["contest_id"], submission_id)
+                try:
+                    # Submit the solution and retrieve the submission ID
+                    submission_id = submit_solution(zip_files, config, branch)
+                    if submission_id:
+                        wait_for_results(session, config["contest_id"], submission_id)
 
-                    # Check if this branch should trigger an auto-merge
-                    if branch == config.get("auto_merge_branch"):
-                        grouped_results = fetch_test_results(session, config["contest_id"], submission_id)
+                        # Check if this branch should trigger an auto-merge
+                        if branch == config.get("auto_merge_branch"):
+                            grouped_results = fetch_test_results(session, config["contest_id"], submission_id)
 
-                        # Ensure all tests passed before merging
-                        if grouped_results and not any(
-                            "error" in test["result"].lower()
-                            for group in grouped_results.values()
-                            for test in group["tests"]
-                        ):
-                            perform_auto_merge(branch, grouped_results)
-                        else:
-                            send_telegram_message(
-                                f"⚠️ *Auto-Merge Skipped*\n"
-                                f"Branch `{branch}` was not merged into `{PRIMARY_BRANCH}` due to test failures."
-                            )
+                            # Ensure all tests passed before merging
+                            if grouped_results and not any(
+                                "error" in test["result"].lower()
+                                for group in grouped_results.values()
+                                for test in group["tests"]
+                            ):
+                                perform_auto_merge(branch, grouped_results)
+                            else:
+                                send_telegram_message(
+                                    f"⚠️ *Auto-Merge Skipped*\n"
+                                    f"Branch `{branch}` was not merged into `{PRIMARY_BRANCH}` due to test failures."
+                                )
 
-                # Clean up
-                for zip_file in zip_files:
-                    os.remove(zip_file)
+                finally:
+                    # Ensure the temporary directory is cleaned up
+                    temp_dir.cleanup()
 
                 # Update the last processed commit for this branch and save to file
                 last_commit_per_branch[branch] = current_commit
