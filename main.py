@@ -854,7 +854,7 @@ def main():
                                 for group in grouped_results.values()
                                 for test in group["tests"]
                             ):
-                                perform_auto_merge(branch, grouped_results)
+                                perform_auto_merge(branch, grouped_results, current_commit)
                             else:
                                 send_telegram_message(
                                     f"⚠️ *Auto-Merge Skipped*\n"
