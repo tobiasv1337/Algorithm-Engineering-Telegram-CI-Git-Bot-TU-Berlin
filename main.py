@@ -163,6 +163,19 @@ def get_tracked_branches():
             return config["branches"]
     return [PRIMARY_BRANCH]  # Default to PRIMARY_BRANCH if branches are not specified
 
+def reset_to_commit(commit_hash):
+    """
+    Reset the repository to the specified commit.
+    Ensures the working directory matches the detected commit.
+    """
+    try:
+        subprocess.run(["git", "-C", REPO_PATH, "checkout", commit_hash], check=True)
+        print(f"Checked out to commit {commit_hash}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error checking out to commit {commit_hash}: {e}")
+        send_telegram_message(f"❌ *Error Checking Out Commit*\nCommit: `{commit_hash}`\n{str(e)}")
+        raise
+
 def create_zip_files(config):
     """
     Create multiple ZIP files based on the `zip_files` configuration in the submission config.
@@ -721,6 +734,9 @@ def main():
                     last_commit_per_branch[branch] = current_commit
                     save_last_commits(last_commit_per_branch)
                     continue
+
+                # Reset the repository to the specific commit
+                reset_to_commit(current_commit)
 
                 # Create ZIP files based on include paths
                 zip_files = create_zip_files(config)
