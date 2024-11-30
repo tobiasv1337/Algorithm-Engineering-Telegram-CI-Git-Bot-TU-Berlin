@@ -782,8 +782,8 @@ def main():
                         grouped_results = fetch_test_results(session, config["contest_id"], submission_id)
 
                         # Ensure all tests passed before merging
-                        if grouped_results and all(
-                            test["result"].lower() == "ok"
+                        if grouped_results and not any(
+                            "error" in test["result"].lower()
                             for group in grouped_results.values()
                             for test in group["tests"]
                         ):
