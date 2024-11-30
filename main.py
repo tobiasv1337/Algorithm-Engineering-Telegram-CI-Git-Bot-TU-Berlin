@@ -22,7 +22,7 @@ OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
 OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
 OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env file
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",") # Load multiple chat IDs from .env
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
@@ -107,23 +107,24 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
     # Split message using the newline-aware function
     split_messages = split_message_by_newline(escaped_message, max_length)
 
-    # Send each part as a separate Telegram message
-    for part in split_messages:
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": part.strip(),
-            "parse_mode": parse_mode,  # Pass the parse mode as a parameter
-            "disable_web_page_preview": disable_web_page_preview  # Pass link preview toggle
-        }
-        try:
-            response = requests.post(url, data=payload)
-            if response.status_code == 200:
-                print("Message sent to Telegram successfully.")
-            else:
-                print(f"Failed to send message to Telegram. Status code: {response.status_code}")
-                print(f"Response: {response.text}")
-        except Exception as e:
-            print(f"Error sending message to Telegram: {e}")
+    for chat_id in TELEGRAM_CHAT_IDS:
+        # Send each part as a separate Telegram message
+        for part in split_messages:
+            payload = {
+                "chat_id": chat_id,
+                "text": part.strip(),
+                "parse_mode": parse_mode,  # Pass the parse mode as a parameter
+                "disable_web_page_preview": disable_web_page_preview  # Pass link preview toggle
+            }
+            try:
+                response = requests.post(url, data=payload)
+                if response.status_code == 200:
+                    print("Message sent to Telegram successfully.")
+                else:
+                    print(f"Failed to send message to Telegram. Status code: {response.status_code}")
+                    print(f"Response: {response.text}")
+            except Exception as e:
+                print(f"Error sending message to Telegram: {e}")
 
 def fetch_all_branches():
     """Fetch all branches from the remote repository and handle fetch errors."""
