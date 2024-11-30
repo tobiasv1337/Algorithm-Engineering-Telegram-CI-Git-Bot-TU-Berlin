@@ -5,6 +5,7 @@ import re
 import signal
 import subprocess
 import requests
+import tempfile
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 from dotenv import load_dotenv
@@ -224,35 +225,60 @@ def create_zip_files(config):
     return created_files
 
 def check_for_compiler_errors(config):
-    """Run a compilation check, send Telegram warnings/errors, and decide whether to block submission."""
-    try:
-        result = subprocess.run(["cargo", "check"], cwd=REPO_PATH, capture_output=True, text=True)
-        
-        # Check for errors
-        if result.returncode != 0:
-            message = f"❌ *Compiler Errors Detected*\n\n{result.stderr}"
-            print(message)
-            send_telegram_message(message)
-            if not config.get("ALLOW_ERRORS", False):
-                print("Errors not allowed. Blocking submission.")
-                return False  # Block submission if errors are not allowed
+    """
+    Run a compilation check for each independent Rust project specified in the configuration.
+    Creates ZIP files first, extracts them to temporary directories, and checks each project for compilation errors.
+    """
+    zip_files = create_zip_files(config)  # Create ZIP files as specified in the configuration
+    all_projects_meet_criteria = True  # Track if all projects meet the specified criteria
 
-        # Check for warnings
-        if "warning" in result.stderr.lower():
-            message = f"⚠️ *Compiler Warnings Detected*\n\n{result.stderr}"
-            print(message)
-            send_telegram_message(message)
-            if not config.get("ALLOW_WARNINGS", False):
-                print("Warnings not allowed. Blocking submission.")
-                return False  # Block submission if warnings are not allowed
+    for zip_file in zip_files:
+        # Create a temporary directory to extract the ZIP file
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                # Extract the ZIP file
+                with ZipFile(zip_file, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
 
-        print("✅ Compilation check completed. Warnings/errors allowed, proceeding with submission.")
-        return True  # Continue submission
-    except subprocess.CalledProcessError as e:
-        message = f"❌ *Error Running Compilation Check*\n\n{str(e)}"
-        print(message)
-        send_telegram_message(message)
-        return False
+                # Run `cargo check` in the extracted directory
+                result = subprocess.run(["cargo", "check"], cwd=temp_dir, capture_output=True, text=True)
+
+                # Check for errors
+                if result.returncode != 0:
+                    message = f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{result.stderr}"
+                    print(message)
+                    send_telegram_message(message)
+                    if not config.get("ALLOW_ERRORS", False):
+                        all_projects_meet_criteria = False  # Mark as not meeting criteria if errors are not allowed
+                        print("Errors not allowed. Stopping further checks.")
+                        break  # Exit the loop to clean up and return
+
+                # Check for warnings
+                if "warning" in result.stderr.lower():
+                    message = f"⚠️ *Compiler Warnings Detected in {os.path.basename(zip_file)}*\n\n{result.stderr}"
+                    print(message)
+                    send_telegram_message(message)
+                    if not config.get("ALLOW_WARNINGS", False):
+                        all_projects_meet_criteria = False  # Mark as not meeting criteria if warnings are not allowed
+                        print("Warnings not allowed. Stopping further checks.")
+                        break  # Exit the loop to clean up and return
+
+                print(f"✅ Compilation check completed successfully for {os.path.basename(zip_file)}.")
+            except Exception as e:
+                message = f"❌ *Error During Compilation Check for {os.path.basename(zip_file)}*\n\n{str(e)}"
+                print(message)
+                send_telegram_message(message)
+                all_projects_meet_criteria = False  # Mark as not meeting criteria for any unexpected errors
+                break  # Exit the loop to clean up and return
+
+    # Clean up: remove the ZIP files after checks are done
+    for zip_file in zip_files:
+        try:
+            os.remove(zip_file)
+        except Exception as e:
+            print(f"⚠️ Could not delete ZIP file {zip_file}: {str(e)}")
+
+    return all_projects_meet_criteria  # Return True only if all projects meet the criteria
 
 def submit_solution(zip_files, config, branch):
     """
