@@ -751,6 +751,9 @@ def main():
                     save_last_commits(last_commit_per_branch)
                     continue
 
+                # Reset the repository to the specific commit
+                reset_to_commit(current_commit)
+
                 # Check for compiler errors and warnings
                 if not check_for_compiler_errors(config):
                     message = (
@@ -765,9 +768,6 @@ def main():
                     last_commit_per_branch[branch] = current_commit
                     save_last_commits(last_commit_per_branch)
                     continue
-
-                # Reset the repository to the specific commit
-                reset_to_commit(current_commit)
 
                 # Create ZIP files based on include paths
                 zip_files = create_zip_files(config)
