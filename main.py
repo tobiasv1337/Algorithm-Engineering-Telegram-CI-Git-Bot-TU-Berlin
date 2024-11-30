@@ -651,7 +651,7 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
     send_telegram_message(summary_message)
 
 
-def perform_auto_merge(branch, grouped_results):
+def perform_auto_merge(branch, grouped_results, commit_hash):
     """
     Automatically merge the specified branch into PRIMARY_BRANCH after successful testing.
     Includes a short summary of test results in the commit message.
@@ -667,10 +667,40 @@ def perform_auto_merge(branch, grouped_results):
         # Prepare the test summary for the commit message
         test_summary = f"Tests Passed: {passed_tests}/{total_tests}"
 
-        # Step 1: Checkout the PRIMARY_BRANCH branch
+        # Step 1: Fetch the latest changes for the submit branch to ensure it's up to date
+        fetch_result = subprocess.run(
+            ["git", "-C", REPO_PATH, "fetch", "origin", branch],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if fetch_result.returncode != 0:
+            send_telegram_message(
+                f"❌ *Auto-Merge Failed*\n"
+                f"Failed to fetch the latest changes for `{branch}`. Merge aborted.\n"
+                f"Details:\n```\n{fetch_result.stderr.strip()}\n```"
+            )
+            return
+
+        # Step 2: Reset the submit branch to the specific commit hash
+        reset_result = subprocess.run(
+            ["git", "-C", REPO_PATH, "checkout", "-B", branch, commit_hash],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if reset_result.returncode != 0:
+            send_telegram_message(
+                f"❌ *Auto-Merge Failed*\n"
+                f"Failed to reset branch `{branch}` to commit `{commit_hash}`. Merge aborted.\n"
+                f"Details:\n```\n{reset_result.stderr.strip()}\n```"
+            )
+            return
+
+        # Step 3: Checkout the PRIMARY_BRANCH branch
         subprocess.run(["git", "-C", REPO_PATH, "checkout", PRIMARY_BRANCH], check=True)
 
-        # Step 2: Pull the latest changes from the remote to ensure the local branch is up-to-date
+        # Step 4: Pull the latest changes from the remote to ensure the local branch is up-to-date
         pull_result = subprocess.run(
             ["git", "-C", REPO_PATH, "pull", "origin", PRIMARY_BRANCH],
             stdout=subprocess.PIPE,
@@ -685,7 +715,7 @@ def perform_auto_merge(branch, grouped_results):
             )
             return
 
-        # Step 3: Merge the target branch into PRIMARY_BRANCH with --no-commit and --no-ff to detect conflicts
+        # Step 5: Merge the target branch into PRIMARY_BRANCH with --no-commit and --no-ff to detect conflicts
         merge_result = subprocess.run(
             ["git", "-C", REPO_PATH, "merge", "--no-commit", "--no-ff", branch],
             stdout=subprocess.PIPE,
@@ -705,11 +735,11 @@ def perform_auto_merge(branch, grouped_results):
             subprocess.run(["git", "-C", REPO_PATH, "merge", "--abort"], check=True)
             return
 
-        # Step 4: Commit and complete the merge if no conflicts
+        # Step 6: Commit and complete the merge if no conflicts
         commit_message = f"Merge branch '{branch}' into `{PRIMARY_BRANCH}`\n\n{test_summary}"
         subprocess.run(["git", "-C", REPO_PATH, "commit", "-m", commit_message], check=True)
 
-        # Step 5: Push the merged changes to the remote
+        # Step 7: Push the merged changes to the remote
         push_result = subprocess.run(
             ["git", "-C", REPO_PATH, "push", "origin", PRIMARY_BRANCH],
             stdout=subprocess.PIPE,
