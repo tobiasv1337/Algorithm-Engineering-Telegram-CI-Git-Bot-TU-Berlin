@@ -179,6 +179,7 @@ def reset_to_commit(commit_hash):
 def create_zip_files(config):
     """
     Create multiple ZIP files based on the `zip_files` configuration in the submission config.
+    Allows specifying destination paths for files and folders within the ZIP.
     Returns a list of created ZIP file paths.
     """
     zip_files = config.get("zip_files", [])
@@ -190,29 +191,33 @@ def create_zip_files(config):
         zip_path = os.path.join(REPO_PATH, zip_name)
 
         with ZipFile(zip_path, 'w') as zipf:
-            for path in include_paths:
-                full_path = os.path.join(REPO_PATH, os.path.normpath(path))
+            for path_mapping in include_paths:
+                source_path = os.path.join(REPO_PATH, os.path.normpath(path_mapping["source"]))
+                destination_path = os.path.normpath(path_mapping["destination"])
 
                 # Verify that each path is within the repository and not a symlink
-                if not full_path.startswith(REPO_PATH) or os.path.islink(full_path):
-                    print(f"Skipping unsafe or invalid path: '{path}'")
+                if not source_path.startswith(REPO_PATH) or os.path.islink(source_path):
+                    print(f"Skipping unsafe or invalid path: '{source_path}'")
                     continue
 
-                # If the path is a file, add it directly
-                if os.path.isfile(full_path):
-                    zipf.write(full_path, os.path.relpath(full_path, REPO_PATH))
-                # If the path is a directory, walk through and add all files within it
-                elif os.path.isdir(full_path):
-                    for root, _, files in os.walk(full_path):
+                # If the path is a file, add it directly to the specified destination
+                if os.path.isfile(source_path):
+                    zipf.write(source_path, destination_path)
+
+                # If the path is a directory, walk through and add all files to the destination folder
+                elif os.path.isdir(source_path):
+                    for root, _, files in os.walk(source_path):
                         if os.path.islink(root):
                             print(f"Skipping symlinked directory: '{root}'")
                             continue
                         for file in files:
                             file_path = os.path.join(root, file)
                             if not os.path.islink(file_path):
-                                zipf.write(file_path, os.path.relpath(file_path, REPO_PATH))
+                                # Compute the relative path to preserve folder structure
+                                relative_path = os.path.relpath(file_path, source_path)
+                                zipf.write(file_path, os.path.join(destination_path, relative_path))
                 else:
-                    print(f"Warning: Path '{path}' not found in the repository.")
+                    print(f"Warning: Path '{source_path}' not found in the repository.")
 
         created_files.append(zip_path)
 
