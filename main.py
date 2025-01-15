@@ -39,8 +39,23 @@ def handle_shutdown_signal(signum, frame):
 def get_api_key_for_contest(contest_id):
     """
     Retrieve the API key for a given contest ID.
+    Raises an exception if no API key is found.
     """
-    return OIOIOI_API_KEYS.get(contest_id, None)
+    api_key = OIOIOI_API_KEYS.get(contest_id)
+    if not api_key:
+        message = (
+            f"❌ No API key found for contest '{contest_id}'.\n"
+            f"Please add the API key for this contest to the `.env` file.\n"
+            f"Example:\n\n"
+            f"OIOIOI_API_KEYS={{\n"
+            f'    "{contest_id}": "your_api_key_here",\n'
+            f"    ...\n"
+            f"}}"
+        )
+        print(message)
+        send_telegram_message(message)
+        raise KeyError(f"API key for contest '{contest_id}' not found.")
+    return api_key
 
 def load_last_commits():
     """Load the last processed commit hashes from a file."""
@@ -289,16 +304,19 @@ def submit_solution(zip_files, config, branch):
     Submit multiple ZIP files via the OIOIOI API for the specified contest.
     The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
     """
-    contest_id = config["contest_id"]
-    api_key = get_api_key_for_contest(contest_id)
-
-    if not api_key:
-        message = f"❌ *Submission Failed*\nNo API key found for contest `{contest_id}`."
+    try:
+        api_key = get_api_key_for_contest(config["contest_id"])
+    except KeyError:
+        message = (
+            f"❌ *Submission Aborted*\n"
+            f"No API key found for contest '{config['contest_id']}'.\n"
+            f"Please add the API key to continue."
+        )
         print(message)
         send_telegram_message(message)
         return None
 
-    url = f"{OIOIOI_BASE_URL}/api/c/{contest_id}/submit/{config['problem_short_name']}"
+    url = f"{OIOIOI_BASE_URL}/api/c/{config["contest_id"]}/submit/{config['problem_short_name']}"
     headers = {
         "Authorization": f"token {api_key}"
     }
