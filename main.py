@@ -9,6 +9,8 @@ import tempfile
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 from dotenv import load_dotenv
+from handlers.registry import LANGUAGE_HANDLERS # Import language handlers
+from handlers.base_handler import CompilationError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -249,55 +251,83 @@ def create_zip_files(config):
 
 def check_for_compiler_errors(config):
     """
-    Run a compilation check for each independent Rust project specified in the configuration.
+    Run a compilation check for each project specified in the configuration.
+    Uses language-specific handlers to process each project in a temporary directory. Handles errors and warnings based on configuration flags.
     Creates ZIP files first, extracts them to temporary directories, and checks each project for compilation errors.
     """
-    zip_files, temp_dir = create_zip_files(config)  # Create ZIP files in a temporary directory
-    all_projects_meet_criteria = True  # Track if all projects meet the specified criteria
+    language = config.get("language")
+    if not language:
+        message = (
+            "❌ *Error*: The language is not specified in the submission configuration.\n"
+            "Please specify a language (e.g., 'rust', 'cpp').\n\n"
+            f"🛠 Supported languages: {', '.join(LANGUAGE_HANDLERS.keys())}"
+        )
+        print(message)
+        send_telegram_message(message)
+        return False
+
+    if language not in LANGUAGE_HANDLERS:
+        message = (
+            f"❌ *Error*: Unsupported language '{language}'.\n"
+            f"🛠 Supported languages are: {', '.join(LANGUAGE_HANDLERS.keys())}.\n\n"
+            "💡 If you need support for this language, please contact the bot administrator."
+        )
+        print(message)
+        send_telegram_message(message)
+        return False
+
+    handler = LANGUAGE_HANDLERS[language]
+
+    zip_files, temp_dir = create_zip_files(config)
+    all_projects_meet_criteria = True
 
     for zip_file in zip_files:
-        # Create a temporary directory to extract the ZIP file
         with tempfile.TemporaryDirectory() as temp_dir_extract:
             try:
-                # Extract the ZIP file
                 with ZipFile(zip_file, 'r') as zip_ref:
                     zip_ref.extractall(temp_dir_extract)
 
-                # Run `cargo check` in the extracted directory
-                result = subprocess.run(["cargo", "check"], cwd=temp_dir_extract, capture_output=True, text=True)
+                try:
+                    result = handler.compile(temp_dir_extract)
 
-                # Check for errors
-                if result.returncode != 0:
-                    message = f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{result.stderr}"
-                    print(message)
-                    send_telegram_message(message)
+                    if result.warnings:
+                        warning_message = (
+                            f"⚠️ *Warnings Detected in {os.path.basename(zip_file)}*\n\n"
+                            f"{result.warnings}"
+                        )
+                        print(warning_message)
+                        send_telegram_message(warning_message)
+
+                        if not config.get("ALLOW_WARNINGS", False):
+                            all_projects_meet_criteria = False
+                            break
+
+                    print(f"✅ Compilation check completed successfully for {os.path.basename(zip_file)}.")
+
+                except CompilationError as e:
+                    error_message = (
+                        f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{str(e)}"
+                    )
+                    print(error_message)
+                    send_telegram_message(error_message)
+
                     if not config.get("ALLOW_ERRORS", False):
-                        all_projects_meet_criteria = False  # Mark as not meeting criteria if errors are not allowed
-                        print("Errors not allowed. Stopping further checks.")
-                        break  # Exit the loop to clean up and return
+                        all_projects_meet_criteria = False
+                        break
 
-                # Check for warnings
-                if "warning" in result.stderr.lower():
-                    message = f"⚠️ *Compiler Warnings Detected in {os.path.basename(zip_file)}*\n\n{result.stderr}"
-                    print(message)
-                    send_telegram_message(message)
-                    if not config.get("ALLOW_WARNINGS", False):
-                        all_projects_meet_criteria = False  # Mark as not meeting criteria if warnings are not allowed
-                        print("Warnings not allowed. Stopping further checks.")
-                        break  # Exit the loop to clean up and return
-
-                print(f"✅ Compilation check completed successfully for {os.path.basename(zip_file)}.")
             except Exception as e:
-                message = f"❌ *Error During Compilation Check for {os.path.basename(zip_file)}*\n\n{str(e)}"
-                print(message)
-                send_telegram_message(message)
-                all_projects_meet_criteria = False  # Mark as not meeting criteria for any unexpected errors
-                break  # Exit the loop to clean up and return
+                unexpected_error_message = (
+                    f"❌ *Unexpected Error During Compilation Check*\n\n"
+                    f"Project: `{os.path.basename(zip_file)}`\n"
+                    f"Error: {str(e)}"
+                )
+                print(unexpected_error_message)
+                send_telegram_message(unexpected_error_message)
+                all_projects_meet_criteria = False
+                break
 
-    # Clean up the temporary directory containing ZIP files (automatic with TemporaryDirectory)
-    temp_dir.cleanup()  # Explicitly clean up in case the temp dir is not automatically deleted
-
-    return all_projects_meet_criteria  # Return True only if all projects meet the criteria
+    temp_dir.cleanup()
+    return all_projects_meet_criteria
 
 def submit_solution(zip_files, config, branch):
     """
