@@ -1,10 +1,8 @@
 import os
 import time
 import json
-import re
 import signal
 import subprocess
-import requests
 import tempfile
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
@@ -14,17 +12,10 @@ from config.config import Config
 from git_manager.git_operations import (fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
+from utils.file_operations import create_zip_files
+from utils.system import handle_shutdown_signal, shutdown_flag
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
-
-# Global variable to track requested shutdown
-shutdown_flag = False
-
-def handle_shutdown_signal(signum, frame):
-    """Signal handler to stop the script gracefully."""
-    global shutdown_flag
-    print(f"\nSignal {signum} received. Shutting down gracefully...")
-    shutdown_flag = True
 
 def load_last_commits():
     """Load the last processed commit hashes from a file."""
@@ -40,55 +31,7 @@ def save_last_commits(last_commit_per_branch):
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
-def create_zip_files(config):
-    """
-    Create multiple ZIP files based on the `zip_files` configuration in the submission config.
-    Allows specifying destination paths for files and folders within the ZIP.
-    Returns a list of created ZIP file paths and the temporary directory used.
-    """
-    zip_files = config.get("zip_files", [])
-    temp_dir = tempfile.TemporaryDirectory()  # Create a temporary directory for ZIP files
-    created_files = []
-
-    for zip_config in zip_files:
-        zip_name = zip_config.get("zip_name", "submission.zip")
-        include_paths = zip_config.get("include_paths", [])
-        zip_path = os.path.join(temp_dir.name, zip_name)  # Place ZIP files in the temp directory
-
-        with ZipFile(zip_path, 'w') as zipf:
-            for path_mapping in include_paths:
-                source_path = os.path.join(Config.REPO_PATH, os.path.normpath(path_mapping["source"]))
-                destination_path = os.path.normpath(path_mapping["destination"])
-
-                # Verify that each path is within the repository and not a symlink
-                if not source_path.startswith(Config.REPO_PATH) or os.path.islink(source_path):
-                    print(f"Skipping unsafe or invalid path: '{source_path}'")
-                    continue
-
-                # If the path is a file, add it directly to the specified destination
-                if os.path.isfile(source_path):
-                    zipf.write(source_path, destination_path)
-
-                # If the path is a directory, walk through and add all files to the destination folder
-                elif os.path.isdir(source_path):
-                    for root, _, files in os.walk(source_path):
-                        if os.path.islink(root):
-                            print(f"Skipping symlinked directory: '{root}'")
-                            continue
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            if not os.path.islink(file_path):
-                                # Compute the relative path to preserve folder structure
-                                relative_path = os.path.relpath(file_path, source_path)
-                                zipf.write(file_path, os.path.join(destination_path, relative_path))
-                else:
-                    print(f"Warning: Path '{source_path}' not found in the repository.")
-
-        created_files.append(zip_path)
-
-    return created_files, temp_dir
-
-def check_for_compiler_errors(config):
+def check_for_compiler_errors(config, telegram_bot):
     """
     Run a compilation check for each project specified in the configuration.
     Uses language-specific handlers to process each project in a temporary directory. Handles errors and warnings based on configuration flags.
@@ -102,7 +45,7 @@ def check_for_compiler_errors(config):
             f"🛠 Supported languages: {', '.join(LANGUAGE_HANDLERS.keys())}"
         )
         print(message)
-        send_telegram_message(message)
+        telegram_bot.send_message(message)
         return False
 
     if language not in LANGUAGE_HANDLERS:
@@ -112,7 +55,7 @@ def check_for_compiler_errors(config):
             "💡 If you need support for this language, please contact the bot administrator."
         )
         print(message)
-        send_telegram_message(message)
+        telegram_bot.send_message(message)
         return False
 
     handler = LANGUAGE_HANDLERS[language]
@@ -135,7 +78,7 @@ def check_for_compiler_errors(config):
                             f"{result.warnings}"
                         )
                         print(warning_message)
-                        send_telegram_message(warning_message)
+                        telegram_bot.send_message(warning_message)
 
                         if not config.get("ALLOW_WARNINGS", False):
                             all_projects_meet_criteria = False
@@ -148,7 +91,7 @@ def check_for_compiler_errors(config):
                         f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{str(e)}"
                     )
                     print(error_message)
-                    send_telegram_message(error_message)
+                    telegram_bot.send_message(error_message)
 
                     if not config.get("ALLOW_ERRORS", False):
                         all_projects_meet_criteria = False
@@ -161,14 +104,14 @@ def check_for_compiler_errors(config):
                     f"Error: {str(e)}"
                 )
                 print(unexpected_error_message)
-                send_telegram_message(unexpected_error_message)
+                telegram_bot.send_message(unexpected_error_message)
                 all_projects_meet_criteria = False
                 break
 
     temp_dir.cleanup()
     return all_projects_meet_criteria
 
-def perform_auto_merge(branch, grouped_results, commit_hash):
+def perform_auto_merge(branch, grouped_results, commit_hash, telegram_bot):
     """
     Automatically merge the specified branch into PRIMARY_BRANCH after successful testing.
     Includes a short summary of test results in the commit message.
@@ -192,7 +135,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             text=True,
         )
         if fetch_result.returncode != 0:
-            send_telegram_message(
+            telegram_bot.send_message(
                 f"❌ *Auto-Merge Failed*\n"
                 f"Failed to fetch the latest changes for `{branch}`. Merge aborted.\n"
                 f"Details:\n```\n{fetch_result.stderr.strip()}\n```"
@@ -207,7 +150,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             text=True,
         )
         if reset_result.returncode != 0:
-            send_telegram_message(
+            telegram_bot.send_message(
                 f"❌ *Auto-Merge Failed*\n"
                 f"Failed to reset branch `{branch}` to commit `{commit_hash}`. Merge aborted.\n"
                 f"Details:\n```\n{reset_result.stderr.strip()}\n```"
@@ -225,7 +168,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             text=True,
         )
         if pull_result.returncode != 0:
-            send_telegram_message(
+            telegram_bot.send_message(
                 f"❌ *Auto-Merge Failed*\n"
                 f"Failed to pull the latest changes for `{Config.PRIMARY_BRANCH}`. Merge aborted.\n"
                 f"Details:\n```\n{pull_result.stderr.strip()}\n```"
@@ -242,7 +185,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
 
         # Check for conflicts
         if "CONFLICT" in merge_result.stderr:
-            send_telegram_message(
+            telegram_bot.send_message(
                 f"⚠️ *Merge Conflict Detected*\n"
                 f"Branch `{branch}` could not be merged into `{Config.PRIMARY_BRANCH}` due to conflicts.\n"
                 f"Details:\n```\n{merge_result.stderr.strip()}\n```"
@@ -264,7 +207,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             text=True,
         )
         if push_result.returncode != 0:
-            send_telegram_message(
+            telegram_bot.send_message(
                 f"❌ *Push Failed*\n"
                 f"The merged changes for `{Config.PRIMARY_BRANCH}` could not be pushed to the remote.\n"
                 f"Details:\n```\n{push_result.stderr.strip()}\n```"
@@ -272,12 +215,12 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             return
 
         # Send Telegram notification about success
-        send_telegram_message(f"✅ *Auto-Merge Successful*\n"
+        telegram_bot.send_message(f"✅ *Auto-Merge Successful*\n"
                               f"Branch `{branch}` was successfully merged into `{Config.PRIMARY_BRANCH}`.\n"
                               f"{test_summary}")
     except subprocess.CalledProcessError as e:
         # Handle unexpected errors during merge and notify via Telegram
-        send_telegram_message(f"❌ *Auto-Merge Failed*\n"
+        telegram_bot.send_message(f"❌ *Auto-Merge Failed*\n"
                               f"Error during merging branch `{branch}` into `{Config.PRIMARY_BRANCH}`.\n"
                               f"Details: {str(e)}")
 
@@ -317,7 +260,7 @@ def main():
                     f"• *Message*: {commit_message}\n"
                 )
                 print(message)
-                send_telegram_message(message)
+                telegram_bot.send_message(message)
 
                 # Load the config file from this specific commit
                 config = load_config_from_commit(current_commit)
@@ -331,7 +274,7 @@ def main():
                         f"• *Commit Hash*: `{current_commit}`"
                     )
                     print(message)
-                    send_telegram_message(message)
+                    telegram_bot.send_message(message)
                     last_commit_per_branch[branch] = current_commit
                     save_last_commits(last_commit_per_branch)
                     continue
@@ -349,7 +292,7 @@ def main():
                         f"• *Errors Allowed*: {config.get('ALLOW_ERRORS', False)}"
                     )
                     print(message)
-                    send_telegram_message(message)
+                    telegram_bot.send_message(message)
                     last_commit_per_branch[branch] = current_commit
                     save_last_commits(last_commit_per_branch)
                     continue
@@ -375,7 +318,7 @@ def main():
                             ):
                                 perform_auto_merge(branch, grouped_results, current_commit)
                             else:
-                                send_telegram_message(
+                                telegram_bot.send_message(
                                     f"⚠️ *Auto-Merge Skipped*\n"
                                     f"Branch `{branch}` was not merged into `{Config.PRIMARY_BRANCH}` due to test failures."
                                 )
