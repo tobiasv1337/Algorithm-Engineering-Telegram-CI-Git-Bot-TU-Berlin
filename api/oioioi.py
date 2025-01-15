@@ -4,6 +4,7 @@ import time
 from bs4 import BeautifulSoup
 from api.telegram import send_telegram_message
 from config.config import Config
+from utils.results_utils import (parse_numeric_value, send_results_summary_to_telegram)
 
 
 class OioioiAPI:
@@ -139,7 +140,7 @@ class OioioiAPI:
                 if len(cells) > 1:
                     test_name = cells[1].text.strip()
                     result = cells[2].text.strip()
-                    runtime = self.parse_numeric_value(cells[3].text)
+                    runtime = parse_numeric_value(cells[3].text)
 
                     # Extract group key (first number from test name)
                     group_key = test_name.split()[0][0]  # Extract the first number
@@ -163,7 +164,7 @@ class OioioiAPI:
 
                     # Add to the total score for the group
                     if len(cells) > 4:
-                        score = self.parse_numeric_value(cells[4].text)
+                        score = parse_numeric_value(cells[4].text)
                         grouped_results[group_key]["total_score"] += score
 
             return grouped_results
@@ -179,7 +180,7 @@ class OioioiAPI:
             grouped_results = self.fetch_test_results(contest_id, submission_id)
             if grouped_results:
                 results_url = f"{self.base_url}/c/{contest_id}/s/{submission_id}/"
-                self.send_results_summary_to_telegram(contest_id, grouped_results, results_url)
+                send_results_summary_to_telegram(contest_id, grouped_results, results_url)
                 break
             else:
                 print("Results not available yet. Checking again in a few seconds...")
