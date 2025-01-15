@@ -2,7 +2,6 @@ import requests
 import os
 import time
 from bs4 import BeautifulSoup
-from api.telegram import send_telegram_message
 from config.config import Config
 from utils.results_utils import (parse_numeric_value, send_results_summary_to_telegram)
 
@@ -55,7 +54,7 @@ class OioioiAPI:
         
         print("🔑 Logged in to OIOIOI.")
 
-    def submit_solution(self, contest_id, problem_short_name, zip_files, branch):
+    def submit_solution(self, contest_id, problem_short_name, zip_files, branch, telegram_bot):
         """
         Submit multiple ZIP files via the OIOIOI API for the specified contest.
         The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
@@ -69,7 +68,7 @@ class OioioiAPI:
                 f"Please add the API key to continue."
             )
             print(message)
-            send_telegram_message(message)
+            telegram_bot.send_message(message)
             return None
 
         url = f"{self.base_url}/api/c/{contest_id}/submit/{problem_short_name}"
@@ -98,17 +97,17 @@ class OioioiAPI:
                     f"• Waiting for results..."
                 )
                 print(message)
-                send_telegram_message(message)
+                telegram_bot.send_message(message)
                 return submission_id
             else:
                 message = f"❌ *Submission Failed*\nStatus Code: {response.status_code}\nResponse: {response.text}"
                 print(message)
-                send_telegram_message(message)
+                telegram_bot.send_message(message)
                 return None
         except Exception as e:
             message = f"❌ *Submission Failed*\nError: {str(e)}"
             print(message)
-            send_telegram_message(message)
+            telegram_bot.send_message(message)
             return None
     
     def fetch_test_results(self, contest_id, submission_id):
@@ -172,7 +171,7 @@ class OioioiAPI:
             print(f"Error fetching or parsing results: {e}")
             return None
         
-    def wait_for_results(self, contest_id, submission_id):
+    def wait_for_results(self, contest_id, submission_id, telegram_bot):
         """
         Poll the results page periodically and send grouped results to Telegram.
         """
@@ -180,7 +179,7 @@ class OioioiAPI:
             grouped_results = self.fetch_test_results(contest_id, submission_id)
             if grouped_results:
                 results_url = f"{self.base_url}/c/{contest_id}/s/{submission_id}/"
-                send_results_summary_to_telegram(contest_id, grouped_results, results_url)
+                send_results_summary_to_telegram(contest_id, grouped_results, results_url, telegram_bot)
                 break
             else:
                 print("Results not available yet. Checking again in a few seconds...")

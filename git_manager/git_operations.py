@@ -1,19 +1,18 @@
 import subprocess
 import json
 from config.config import Config
-from api.telegram import send_telegram_message
 
-def fetch_all_branches():
+def fetch_all_branches(telegram_bot):
     """Fetch all branches from the remote repository and handle fetch errors."""
     try:
         subprocess.run(["git", "-C", Config.REPO_PATH, "fetch", "--all"], check=True)
     except subprocess.CalledProcessError as e:
         error_message = f"❌ *Git Error: Fetch Failed*\n\n{str(e)}"
         print(error_message)
-        send_telegram_message(error_message)
+        telegram_bot.send_message(error_message)
         raise RuntimeError("Error fetching branches") from e
 
-def get_latest_commit(branch):
+def get_latest_commit(branch, telegram_bot):
     """Get the latest commit hash on the specified branch. Return None if the branch does not exist."""
     try:
         return subprocess.check_output(
@@ -22,10 +21,10 @@ def get_latest_commit(branch):
     except subprocess.CalledProcessError as e:
         warning_message = f"⚠️ *Git Warning: Branch Missing*\nBranch: `{branch}`\nDetails: {str(e)}"
         print(warning_message)
-        send_telegram_message(warning_message)
+        telegram_bot.send_message(warning_message)
         return None
 
-def reset_to_commit(commit_hash):
+def reset_to_commit(commit_hash, telegram_bot):
     """
     Reset the repository to the specified commit.
     Ensures the working directory matches the detected commit.
@@ -40,10 +39,10 @@ def reset_to_commit(commit_hash):
             f"Details: {str(e)}"
         )
         print(error_message)
-        send_telegram_message(error_message)
+        telegram_bot.send_message(error_message)
         raise RuntimeError(f"Error checking out to commit {commit_hash}") from e
 
-def load_config_from_commit(commit_hash):
+def load_config_from_commit(commit_hash, telegram_bot):
     """Load submission configuration from a specific commit."""
     try:
         config_data = subprocess.check_output(["git", "-C", Config.REPO_PATH, "show", f"{commit_hash}:submission_config.json"])
@@ -51,7 +50,7 @@ def load_config_from_commit(commit_hash):
     except subprocess.CalledProcessError:
         message = f"Configuration file 'submission_config.json' not found in commit {commit_hash}."
         print(message)
-        send_telegram_message(message)
+        telegram_bot.send_message(message)
         return None
 
 def get_tracked_branches():

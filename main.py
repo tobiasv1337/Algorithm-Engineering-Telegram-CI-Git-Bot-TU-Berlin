@@ -13,6 +13,7 @@ from handlers.base_handler import CompilationError
 from config.config import Config
 from git_manager.git_operations import (fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
+from api.telegram import TelegramBot
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 
@@ -38,70 +39,6 @@ def save_last_commits(last_commit_per_branch):
         json.dump(last_commit_per_branch, f)
 
 last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
-
-def escape_markdown(text, exclude=None):
-    """Escape special characters in text for Telegram Markdown while preserving formatting."""
-    if exclude is None:
-        exclude = set('*')  # Allow bold
-    escape_chars = '_*[]()~`>#+-=|{}.!'
-    return ''.join(f'\\{char}' if char in escape_chars and char not in exclude else char for char in text)
-
-def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_preview=True):
-    """
-    Send a message to the Telegram group. Automatically splits long messages if needed.
-    Splits at newline characters when possible.
-    """
-    url = f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
-    max_length = 4096  # Telegram's maximum message length
-
-    def split_message_by_newline(message, max_length):
-        """
-        Split the message at newline characters, ensuring no part exceeds max_length.
-        """
-        if len(message) <= max_length:
-            return [message]
-
-        parts = []
-        current_part = ""
-
-        for line in message.split("\n"):
-            # If adding the current line exceeds the limit, finalize the current part
-            if len(current_part) + len(line) + 1 > max_length:
-                parts.append(current_part.strip())
-                current_part = ""
-
-            current_part += line + "\n"
-
-        # Append any remaining text as the last part
-        if current_part:
-            parts.append(current_part.strip())
-
-        return parts
-
-    # Escape special characters while keeping bold and italic
-    escaped_message = escape_markdown(message, exclude={'*'})
-
-    # Split message using the newline-aware function
-    split_messages = split_message_by_newline(escaped_message, max_length)
-
-    for chat_id in Config.TELEGRAM_CHAT_IDS:
-        # Send each part as a separate Telegram message
-        for part in split_messages:
-            payload = {
-                "chat_id": chat_id,
-                "text": part.strip(),
-                "parse_mode": parse_mode,  # Pass the parse mode as a parameter
-                "disable_web_page_preview": disable_web_page_preview  # Pass link preview toggle
-            }
-            try:
-                response = requests.post(url, data=payload)
-                if response.status_code == 200:
-                    print("Message sent to Telegram successfully.")
-                else:
-                    print(f"Failed to send message to Telegram. Status code: {response.status_code}")
-                    print(f"Response: {response.text}")
-            except Exception as e:
-                print(f"Error sending message to Telegram: {e}")
 
 def create_zip_files(config):
     """
@@ -352,6 +289,8 @@ def main():
     oioioi_api = OioioiAPI(Config.OIOIOI_BASE_URL, Config.OIOIOI_USERNAME, Config.OIOIOI_PASSWORD)
     oioioi_api.login()
 
+    telegram_bot = TelegramBot(Config.TELEGRAM_BOT_TOKEN, Config.TELEGRAM_CHAT_IDS)
+
     while not shutdown_flag:
         fetch_all_branches()
 
@@ -420,9 +359,9 @@ def main():
 
                 try:
                     # Submit the solution and retrieve the submission ID
-                    submission_id = oioioi_api.submit_solution(config["contest_id"], config["problem_short_name"], zip_files, branch)
+                    submission_id = oioioi_api.submit_solution(config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot)
                     if submission_id:
-                        oioioi_api.wait_for_results(config["contest_id"], submission_id)
+                        oioioi_api.wait_for_results(config["contest_id"], submission_id, telegram_bot)
 
                         # Check if this branch should trigger an auto-merge
                         if branch == config.get("auto_merge_branch"):

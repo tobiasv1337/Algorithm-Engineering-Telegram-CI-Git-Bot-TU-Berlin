@@ -3,7 +3,6 @@ import time
 import os
 import json
 from config.config import Config
-from api.telegram import send_telegram_message
 
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
 
@@ -209,7 +208,7 @@ def compare_results(contest_id, grouped_results):
 
     return f"{comparison_message}\n\n*Group Details:*\n{group_changes_message}"
 
-def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
+def send_results_summary_to_telegram(contest_id, grouped_results, results_url, telegram_bot):
     """
     Send a detailed summary of improvements and results via Telegram.
     """
@@ -222,10 +221,10 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url):
     
     # Send detailed test results first
     for message in detailed_messages:
-        send_telegram_message(message)
+        telegram_bot.send_message(message)
 
     # Send the improvement summary after detailed results
-    send_telegram_message(summary_message)
+    telegram_bot.send_message(summary_message)
 
 def load_submission_history():
     """Load historical submission data from a file."""
