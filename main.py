@@ -20,7 +20,7 @@ PRIMARY_BRANCH = "master"  # Change this to "main" or any other branch name as n
 OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
 OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
 OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
-OIOIOI_API_TOKEN = os.getenv("OIOIOI_API_TOKEN")  # Load API token from .env file
+OIOIOI_API_KEYS = json.loads(os.getenv("OIOIOI_API_KEYS", "{}"))  # Parse contest-to-API-key mapping
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",") # Load multiple chat IDs from .env
 
@@ -35,6 +35,12 @@ def handle_shutdown_signal(signum, frame):
     global shutdown_flag
     print(f"\nSignal {signum} received. Shutting down gracefully...")
     shutdown_flag = True
+
+def get_api_key_for_contest(contest_id):
+    """
+    Retrieve the API key for a given contest ID.
+    """
+    return OIOIOI_API_KEYS.get(contest_id, None)
 
 def load_last_commits():
     """Load the last processed commit hashes from a file."""
@@ -280,12 +286,21 @@ def check_for_compiler_errors(config):
 
 def submit_solution(zip_files, config, branch):
     """
-    Submit multiple ZIP files via the OIOIOI API.
+    Submit multiple ZIP files via the OIOIOI API for the specified contest.
     The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
     """
-    url = f"{OIOIOI_BASE_URL}/api/c/{config['contest_id']}/submit/{config['problem_short_name']}"
+    contest_id = config["contest_id"]
+    api_key = get_api_key_for_contest(contest_id)
+
+    if not api_key:
+        message = f"❌ *Submission Failed*\nNo API key found for contest `{contest_id}`."
+        print(message)
+        send_telegram_message(message)
+        return None
+
+    url = f"{OIOIOI_BASE_URL}/api/c/{contest_id}/submit/{config['problem_short_name']}"
     headers = {
-        "Authorization": f"token {OIOIOI_API_TOKEN}"
+        "Authorization": f"token {api_key}"
     }
 
     # Prepare files for submission
@@ -295,25 +310,31 @@ def submit_solution(zip_files, config, branch):
         files[file_key] = (os.path.basename(zip_file), open(zip_file, 'rb'))
 
     # Submit the solution
-    response = requests.post(url, headers=headers, files=files)
+    try:
+        response = requests.post(url, headers=headers, files=files)
 
-    # Close the opened file handles
-    for file in files.values():
-        file[1].close()
+        # Close the opened file handles
+        for file in files.values():
+            file[1].close()
 
-    if response.status_code == 200:
-        submission_id = response.text.strip()
-        message = (
-            f"✅ *Submission Accepted*\n"
-            f"• *Branch*: `{branch}`\n"
-            f"• *Submission ID*: `{submission_id}`\n"
-            f"• Waiting for results..."
-        )
-        print(message)
-        send_telegram_message(message)
-        return submission_id
-    else:
-        message = f"❌ *Submission Failed*\nStatus Code: {response.status_code}\nResponse: {response.text}"
+        if response.status_code == 200:
+            submission_id = response.text.strip()
+            message = (
+                f"✅ *Submission Accepted*\n"
+                f"• *Branch*: `{branch}`\n"
+                f"• *Submission ID*: `{submission_id}`\n"
+                f"• Waiting for results..."
+            )
+            print(message)
+            send_telegram_message(message)
+            return submission_id
+        else:
+            message = f"❌ *Submission Failed*\nStatus Code: {response.status_code}\nResponse: {response.text}"
+            print(message)
+            send_telegram_message(message)
+            return None
+    except Exception as e:
+        message = f"❌ *Submission Failed*\nError: {str(e)}"
         print(message)
         send_telegram_message(message)
         return None
