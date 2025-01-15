@@ -8,23 +8,9 @@ import requests
 import tempfile
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
-from dotenv import load_dotenv
 from handlers import LANGUAGE_HANDLERS # Import language handlers
 from handlers.base_handler import CompilationError
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Configuration
-CHECK_INTERVAL = 10  # Check every 10 seconds
-REPO_PATH = "/home/contestbot/vertex_cover"  # Set your repository path here
-PRIMARY_BRANCH = "master"  # Change this to "main" or any other branch name as needed
-OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
-OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
-OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
-OIOIOI_API_KEYS = json.loads(os.getenv("OIOIOI_API_KEYS", "{}").replace('\n', '').replace('\r', ''))  # Parse contest-to-API-key mapping, removing newlines to allow multiline JSON
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",") # Load multiple chat IDs from .env
+from config.config import Config
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
@@ -43,7 +29,7 @@ def get_api_key_for_contest(contest_id):
     Retrieve the API key for a given contest ID.
     Raises an exception if no API key is found.
     """
-    api_key = OIOIOI_API_KEYS.get(contest_id)
+    api_key = Config.OIOIOI_API_KEYS.get(contest_id)
     if not api_key:
         message = (
             f"❌ No API key found for contest '{contest_id}'.\n"
@@ -97,7 +83,7 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
     Send a message to the Telegram group. Automatically splits long messages if needed.
     Splits at newline characters when possible.
     """
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
     max_length = 4096  # Telegram's maximum message length
 
     def split_message_by_newline(message, max_length):
@@ -130,7 +116,7 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
     # Split message using the newline-aware function
     split_messages = split_message_by_newline(escaped_message, max_length)
 
-    for chat_id in TELEGRAM_CHAT_IDS:
+    for chat_id in Config.TELEGRAM_CHAT_IDS:
         # Send each part as a separate Telegram message
         for part in split_messages:
             payload = {
@@ -152,7 +138,7 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
 def fetch_all_branches():
     """Fetch all branches from the remote repository and handle fetch errors."""
     try:
-        subprocess.run(["git", "-C", REPO_PATH, "fetch", "--all"], check=True)
+        subprocess.run(["git", "-C", Config.REPO_PATH, "fetch", "--all"], check=True)
     except subprocess.CalledProcessError as e:
         message = f"Error fetching branches: {e}\nRetrying fetch on next iteration..."
         print(message)
@@ -161,7 +147,7 @@ def fetch_all_branches():
 def get_latest_commit(branch):
     """Get the latest commit hash on the specified branch. Return None if the branch does not exist."""
     try:
-        return subprocess.check_output(["git", "-C", REPO_PATH, "rev-parse", f"origin/{branch}"]).strip().decode('utf-8')
+        return subprocess.check_output(["git", "-C", Config.REPO_PATH, "rev-parse", f"origin/{branch}"]).strip().decode('utf-8')
     except subprocess.CalledProcessError:
         message = f"Warning: Branch '{branch}' does not exist on the remote. Skipping."
         print(message)
@@ -171,7 +157,7 @@ def get_latest_commit(branch):
 def load_config_from_commit(commit_hash):
     """Load submission configuration from a specific commit."""
     try:
-        config_data = subprocess.check_output(["git", "-C", REPO_PATH, "show", f"{commit_hash}:submission_config.json"])
+        config_data = subprocess.check_output(["git", "-C", Config.REPO_PATH, "show", f"{commit_hash}:submission_config.json"])
         return json.loads(config_data)
     except subprocess.CalledProcessError:
         message = f"Configuration file 'submission_config.json' not found in commit {commit_hash}."
@@ -181,12 +167,12 @@ def load_config_from_commit(commit_hash):
 
 def get_tracked_branches():
     """Retrieve the list of branches to track from the last commit's configuration on PRIMARY_BRANCH."""
-    primary_branch_commit = get_latest_commit(PRIMARY_BRANCH)
+    primary_branch_commit = get_latest_commit(Config.PRIMARY_BRANCH)
     if primary_branch_commit:
         config = load_config_from_commit(primary_branch_commit)
         if config and "branches" in config:
             return config["branches"]
-    return [PRIMARY_BRANCH]  # Default to PRIMARY_BRANCH if branches are not specified
+    return [Config.PRIMARY_BRANCH]  # Default to PRIMARY_BRANCH if branches are not specified
 
 def reset_to_commit(commit_hash):
     """
@@ -194,7 +180,7 @@ def reset_to_commit(commit_hash):
     Ensures the working directory matches the detected commit.
     """
     try:
-        subprocess.run(["git", "-C", REPO_PATH, "checkout", commit_hash], check=True)
+        subprocess.run(["git", "-C", Config.REPO_PATH, "checkout", commit_hash], check=True)
         print(f"Checked out to commit {commit_hash}")
     except subprocess.CalledProcessError as e:
         print(f"Error checking out to commit {commit_hash}: {e}")
@@ -218,11 +204,11 @@ def create_zip_files(config):
 
         with ZipFile(zip_path, 'w') as zipf:
             for path_mapping in include_paths:
-                source_path = os.path.join(REPO_PATH, os.path.normpath(path_mapping["source"]))
+                source_path = os.path.join(Config.REPO_PATH, os.path.normpath(path_mapping["source"]))
                 destination_path = os.path.normpath(path_mapping["destination"])
 
                 # Verify that each path is within the repository and not a symlink
-                if not source_path.startswith(REPO_PATH) or os.path.islink(source_path):
+                if not source_path.startswith(Config.REPO_PATH) or os.path.islink(source_path):
                     print(f"Skipping unsafe or invalid path: '{source_path}'")
                     continue
 
@@ -346,7 +332,7 @@ def submit_solution(zip_files, config, branch):
         send_telegram_message(message)
         return None
 
-    url = f"{OIOIOI_BASE_URL}/api/c/{config["contest_id"]}/submit/{config['problem_short_name']}"
+    url = f"{Config.OIOIOI_BASE_URL}/api/c/{config["contest_id"]}/submit/{config['problem_short_name']}"
     headers = {
         "Authorization": f"token {api_key}"
     }
@@ -392,8 +378,8 @@ def login_to_oioioi():
     Log in to OIOIOI using the navbar login form.
     Fetches the CSRF token from the main page and performs the login.
     """
-    main_page_url = f"{OIOIOI_BASE_URL}/"
-    login_url = f"{OIOIOI_BASE_URL}/login/"
+    main_page_url = f"{Config.OIOIOI_BASE_URL}/"
+    login_url = f"{Config.OIOIOI_BASE_URL}/login/"
     session = requests.Session()
 
     # Step 1: Load the main page to fetch the CSRF token
@@ -411,13 +397,13 @@ def login_to_oioioi():
     # Step 2: Perform the login
     payload = {
         "csrfmiddlewaretoken": csrf_token_value,
-        "auth-username": OIOIOI_USERNAME,
-        "auth-password": OIOIOI_PASSWORD,
+        "auth-username": Config.OIOIOI_USERNAME,
+        "auth-password": Config.OIOIOI_PASSWORD,
         "login_view-current_step": "auth",
     }
     headers = {
         "Referer": main_page_url,
-        "Origin": OIOIOI_BASE_URL,
+        "Origin": Config.OIOIOI_BASE_URL,
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "Mozilla/5.0",
     }
@@ -445,7 +431,7 @@ def parse_numeric_value(value):
 
 def fetch_test_results(session, contest_id, submission_id):
     """Fetch and parse the test results or error messages from the HTML report."""
-    url = f"{OIOIOI_BASE_URL}/c/{contest_id}/get_report_HTML/{submission_id}/"
+    url = f"{Config.OIOIOI_BASE_URL}/c/{contest_id}/get_report_HTML/{submission_id}/"
     try:
         response = session.get(url)
         response.raise_for_status()
@@ -554,17 +540,17 @@ def format_results_message(grouped_results, results_url):
     return messages
 
 
-def wait_for_results(session, contest_id, submission_id, check_interval=30):
+def wait_for_results(session, contest_id, submission_id):
     """Poll the results page periodically and send grouped results to Telegram."""
     while True:
         grouped_results = fetch_test_results(session, contest_id, submission_id)
         if grouped_results:
-            results_url = f"{OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
+            results_url = f"{Config.OIOIOI_BASE_URL}/c/{contest_id}/s/{submission_id}/"
             send_results_summary_to_telegram(contest_id, grouped_results, results_url)
             break
         else:
             print("Results not available yet. Checking again in a few seconds...")
-            time.sleep(check_interval)
+            time.sleep(Config.CHECK_INTERVAL)
 
 
 def compare_results(contest_id, grouped_results):
@@ -739,7 +725,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
 
         # Step 1: Fetch the latest changes for the submit branch to ensure it's up to date
         fetch_result = subprocess.run(
-            ["git", "-C", REPO_PATH, "fetch", "origin", branch],
+            ["git", "-C", Config.REPO_PATH, "fetch", "origin", branch],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -754,7 +740,7 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
 
         # Step 2: Reset the submit branch to the specific commit hash
         reset_result = subprocess.run(
-            ["git", "-C", REPO_PATH, "checkout", "-B", branch, commit_hash],
+            ["git", "-C", Config.REPO_PATH, "checkout", "-B", branch, commit_hash],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -768,11 +754,11 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
             return
 
         # Step 3: Checkout the PRIMARY_BRANCH branch
-        subprocess.run(["git", "-C", REPO_PATH, "checkout", PRIMARY_BRANCH], check=True)
+        subprocess.run(["git", "-C", Config.REPO_PATH, "checkout", Config.PRIMARY_BRANCH], check=True)
 
         # Step 4: Pull the latest changes from the remote to ensure the local branch is up-to-date
         pull_result = subprocess.run(
-            ["git", "-C", REPO_PATH, "pull", "origin", PRIMARY_BRANCH],
+            ["git", "-C", Config.REPO_PATH, "pull", "origin", Config.PRIMARY_BRANCH],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -780,14 +766,14 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
         if pull_result.returncode != 0:
             send_telegram_message(
                 f"❌ *Auto-Merge Failed*\n"
-                f"Failed to pull the latest changes for `{PRIMARY_BRANCH}`. Merge aborted.\n"
+                f"Failed to pull the latest changes for `{Config.PRIMARY_BRANCH}`. Merge aborted.\n"
                 f"Details:\n```\n{pull_result.stderr.strip()}\n```"
             )
             return
 
         # Step 5: Merge the target branch into PRIMARY_BRANCH with --no-commit and --no-ff to detect conflicts
         merge_result = subprocess.run(
-            ["git", "-C", REPO_PATH, "merge", "--no-commit", "--no-ff", branch],
+            ["git", "-C", Config.REPO_PATH, "merge", "--no-commit", "--no-ff", branch],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -797,21 +783,21 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
         if "CONFLICT" in merge_result.stderr:
             send_telegram_message(
                 f"⚠️ *Merge Conflict Detected*\n"
-                f"Branch `{branch}` could not be merged into `{PRIMARY_BRANCH}` due to conflicts.\n"
+                f"Branch `{branch}` could not be merged into `{Config.PRIMARY_BRANCH}` due to conflicts.\n"
                 f"Details:\n```\n{merge_result.stderr.strip()}\n```"
             )
 
             # Abort the merge
-            subprocess.run(["git", "-C", REPO_PATH, "merge", "--abort"], check=True)
+            subprocess.run(["git", "-C", Config.REPO_PATH, "merge", "--abort"], check=True)
             return
 
         # Step 6: Commit and complete the merge if no conflicts
-        commit_message = f"Merge branch '{branch}' into `{PRIMARY_BRANCH}`\n\n{test_summary}"
-        subprocess.run(["git", "-C", REPO_PATH, "commit", "-m", commit_message], check=True)
+        commit_message = f"Merge branch '{branch}' into `{Config.PRIMARY_BRANCH}`\n\n{test_summary}"
+        subprocess.run(["git", "-C", Config.REPO_PATH, "commit", "-m", commit_message], check=True)
 
         # Step 7: Push the merged changes to the remote
         push_result = subprocess.run(
-            ["git", "-C", REPO_PATH, "push", "origin", PRIMARY_BRANCH],
+            ["git", "-C", Config.REPO_PATH, "push", "origin", Config.PRIMARY_BRANCH],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -819,19 +805,19 @@ def perform_auto_merge(branch, grouped_results, commit_hash):
         if push_result.returncode != 0:
             send_telegram_message(
                 f"❌ *Push Failed*\n"
-                f"The merged changes for `{PRIMARY_BRANCH}` could not be pushed to the remote.\n"
+                f"The merged changes for `{Config.PRIMARY_BRANCH}` could not be pushed to the remote.\n"
                 f"Details:\n```\n{push_result.stderr.strip()}\n```"
             )
             return
 
         # Send Telegram notification about success
         send_telegram_message(f"✅ *Auto-Merge Successful*\n"
-                              f"Branch `{branch}` was successfully merged into `{PRIMARY_BRANCH}`.\n"
+                              f"Branch `{branch}` was successfully merged into `{Config.PRIMARY_BRANCH}`.\n"
                               f"{test_summary}")
     except subprocess.CalledProcessError as e:
         # Handle unexpected errors during merge and notify via Telegram
         send_telegram_message(f"❌ *Auto-Merge Failed*\n"
-                              f"Error during merging branch `{branch}` into `{PRIMARY_BRANCH}`.\n"
+                              f"Error during merging branch `{branch}` into `{Config.PRIMARY_BRANCH}`.\n"
                               f"Details: {str(e)}")
 
 
@@ -858,7 +844,7 @@ def main():
             # Check if there's a new commit on this branch
             if branch not in last_commit_per_branch or current_commit != last_commit_per_branch[branch]:
                 commit_message = subprocess.check_output(
-                    ["git", "-C", REPO_PATH, "log", "-1", "--pretty=%B", current_commit]
+                    ["git", "-C", Config.REPO_PATH, "log", "-1", "--pretty=%B", current_commit]
                 ).strip().decode('utf-8')
 
                 message = (
@@ -928,7 +914,7 @@ def main():
                             else:
                                 send_telegram_message(
                                     f"⚠️ *Auto-Merge Skipped*\n"
-                                    f"Branch `{branch}` was not merged into `{PRIMARY_BRANCH}` due to test failures."
+                                    f"Branch `{branch}` was not merged into `{Config.PRIMARY_BRANCH}` due to test failures."
                                 )
 
                 finally:
@@ -939,7 +925,7 @@ def main():
                 last_commit_per_branch[branch] = current_commit
                 save_last_commits(last_commit_per_branch)
 
-        time.sleep(CHECK_INTERVAL)
+        time.sleep(Config.CHECK_INTERVAL)
 
 if __name__ == "__main__":
     # Register signal handlers
