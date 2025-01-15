@@ -11,6 +11,7 @@ from zipfile import ZipFile
 from handlers import LANGUAGE_HANDLERS # Import language handlers
 from handlers.base_handler import CompilationError
 from config.config import Config
+from git_manager.git_operations import (fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
@@ -134,58 +135,6 @@ def send_telegram_message(message, parse_mode="MarkdownV2", disable_web_page_pre
                     print(f"Response: {response.text}")
             except Exception as e:
                 print(f"Error sending message to Telegram: {e}")
-
-def fetch_all_branches():
-    """Fetch all branches from the remote repository and handle fetch errors."""
-    try:
-        subprocess.run(["git", "-C", Config.REPO_PATH, "fetch", "--all"], check=True)
-    except subprocess.CalledProcessError as e:
-        message = f"Error fetching branches: {e}\nRetrying fetch on next iteration..."
-        print(message)
-        send_telegram_message(message)
-
-def get_latest_commit(branch):
-    """Get the latest commit hash on the specified branch. Return None if the branch does not exist."""
-    try:
-        return subprocess.check_output(["git", "-C", Config.REPO_PATH, "rev-parse", f"origin/{branch}"]).strip().decode('utf-8')
-    except subprocess.CalledProcessError:
-        message = f"Warning: Branch '{branch}' does not exist on the remote. Skipping."
-        print(message)
-        send_telegram_message(message)
-        return None
-
-def load_config_from_commit(commit_hash):
-    """Load submission configuration from a specific commit."""
-    try:
-        config_data = subprocess.check_output(["git", "-C", Config.REPO_PATH, "show", f"{commit_hash}:submission_config.json"])
-        return json.loads(config_data)
-    except subprocess.CalledProcessError:
-        message = f"Configuration file 'submission_config.json' not found in commit {commit_hash}."
-        print(message)
-        send_telegram_message(message)
-        return None
-
-def get_tracked_branches():
-    """Retrieve the list of branches to track from the last commit's configuration on PRIMARY_BRANCH."""
-    primary_branch_commit = get_latest_commit(Config.PRIMARY_BRANCH)
-    if primary_branch_commit:
-        config = load_config_from_commit(primary_branch_commit)
-        if config and "branches" in config:
-            return config["branches"]
-    return [Config.PRIMARY_BRANCH]  # Default to PRIMARY_BRANCH if branches are not specified
-
-def reset_to_commit(commit_hash):
-    """
-    Reset the repository to the specified commit.
-    Ensures the working directory matches the detected commit.
-    """
-    try:
-        subprocess.run(["git", "-C", Config.REPO_PATH, "checkout", commit_hash], check=True)
-        print(f"Checked out to commit {commit_hash}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error checking out to commit {commit_hash}: {e}")
-        send_telegram_message(f"❌ *Error Checking Out Commit*\nCommit: `{commit_hash}`\n{str(e)}")
-        raise
 
 def create_zip_files(config):
     """
