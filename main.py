@@ -20,7 +20,7 @@ PRIMARY_BRANCH = "master"  # Change this to "main" or any other branch name as n
 OIOIOI_BASE_URL = "https://algeng.inet.tu-berlin.de"
 OIOIOI_USERNAME = os.getenv("OIOIOI_USERNAME")
 OIOIOI_PASSWORD = os.getenv("OIOIOI_PASSWORD")
-OIOIOI_API_KEYS = json.loads(os.getenv("OIOIOI_API_KEYS", "{}"))  # Parse contest-to-API-key mapping
+OIOIOI_API_KEYS = json.loads(os.getenv("OIOIOI_API_KEYS", "{}").replace('\n', '').replace('\r', ''))  # Parse contest-to-API-key mapping, removing newlines to allow multiline JSON
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",") # Load multiple chat IDs from .env
 
