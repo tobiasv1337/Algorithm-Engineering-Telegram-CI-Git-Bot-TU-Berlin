@@ -9,7 +9,7 @@ import tempfile
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 from dotenv import load_dotenv
-from handlers.registry import LANGUAGE_HANDLERS # Import language handlers
+from handlers import LANGUAGE_HANDLERS # Import language handlers
 from handlers.base_handler import CompilationError
 
 # Load environment variables from .env file
