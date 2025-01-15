@@ -5,7 +5,6 @@ import json
 from config.config import Config
 from api.telegram import send_telegram_message
 
-LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
 
 def parse_numeric_value(value):

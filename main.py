@@ -14,6 +14,8 @@ from config.config import Config
 from git_manager.git_operations import (fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
 
+LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
+
 # Global variable to track requested shutdown
 shutdown_flag = False
 
