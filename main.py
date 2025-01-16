@@ -8,9 +8,94 @@ from utils.file_operations import create_zip_files
 from utils.system import handle_shutdown_signal, shutdown_flag
 from handlers.compilation_manager import check_for_compiler_errors
 
+def process_commit(branch, current_commit, config, oioioi_api, telegram_bot):
+    """
+    Process a new commit: validate, compile, submit, and handle results.
+    """
+    # Reset to the specific commit
+    reset_to_commit(current_commit)
+
+    # Check for compiler errors
+    if not check_for_compiler_errors(config):
+        message = (
+            f"\u274c *Compilation Failed*\n"
+            f"\u2022 *Branch*: `{branch}`\n"
+            f"\u2022 *Commit Hash*: `{current_commit}`\n"
+            f"\u2022 *Warnings Allowed*: {config.get('ALLOW_WARNINGS', False)}\n"
+            f"\u2022 *Errors Allowed*: {config.get('ALLOW_ERRORS', False)}"
+        )
+        print(message)
+        telegram_bot.send_message(message)
+        return False
+
+    # Create ZIP files for submission
+    zip_files, temp_dir = create_zip_files(config)
+    try:
+        # Submit the solution
+        submission_id = oioioi_api.submit_solution(
+            config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot
+        )
+        if submission_id:
+            oioioi_api.wait_for_results(config["contest_id"], submission_id, telegram_bot)
+
+            # Handle auto-merge
+            if branch == config.get("auto_merge_branch"):
+                grouped_results = oioioi_api.fetch_test_results(config["contest_id"], submission_id)
+                if grouped_results and not any(
+                    "error" in test["result"].lower()
+                    for group in grouped_results.values()
+                    for test in group["tests"]
+                ):
+                    perform_auto_merge(branch, grouped_results, current_commit, telegram_bot)
+                else:
+                    telegram_bot.send_message(
+                        f"⚠️ *Auto-Merge Skipped*\n"
+                        f"Branch `{branch}` was not merged into `{Config.PRIMARY_BRANCH}` due to test failures."
+                    )
+    finally:
+        temp_dir.cleanup()
+    return True
+
+def process_branch(branch, last_commit_per_branch, oioioi_api, telegram_bot):
+    """
+    Process a branch: check for new commits and handle them.
+    """
+    current_commit = get_latest_commit(branch)
+    if current_commit is None or current_commit == last_commit_per_branch.get(branch):
+        return  # No new commit or branch does not exist
+
+    # Save the current commit to avoid reprocessing
+    last_commit_per_branch[branch] = current_commit
+    save_last_commits(last_commit_per_branch)
+
+    # Notify about the new commit
+    commit_message = get_commit_message(current_commit)
+    telegram_bot.send_message(
+        f"\ud83d\udea8 *New Commit Detected*\n"
+        f"\u2022 *Branch*: `{branch}`\n"
+        f"\u2022 *Commit Hash*: `{current_commit}`\n"
+        f"\u2022 *Message*: {commit_message}\n"
+    )
+
+    # Load the config for the commit
+    config = load_config_from_commit(current_commit)
+    if not config or not config.get("AUTOCOMMIT", False):
+        message = (
+            f"\u26a0\ufe0f *Skipping Submission*\n"
+            f"\u2022 *Reason*: AUTOCOMMIT is disabled or config is missing.\n"
+            f"\u2022 *Branch*: `{branch}`\n"
+            f"\u2022 *Commit Hash*: `{current_commit}`"
+        )
+        print(message)
+        telegram_bot.send_message(message)
+        return
+
+    # Process the commit
+    process_commit(branch, current_commit, config, oioioi_api, telegram_bot)
+
 def main():
     global shutdown_flag
-    last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
+    last_commit_per_branch = load_last_commits()
 
     oioioi_api = OioioiAPI(Config.OIOIOI_BASE_URL, Config.OIOIOI_USERNAME, Config.OIOIOI_PASSWORD)
     oioioi_api.login()
@@ -19,96 +104,10 @@ def main():
 
     while not shutdown_flag:
         fetch_all_branches()
-
-        # Check branches to track from the PRIMARY_BRANCH configuration
         branches_to_check = get_tracked_branches()
 
         for branch in branches_to_check:
-            current_commit = get_latest_commit(branch)
-
-            # Skip if the branch does not exist on the remote
-            if current_commit is None:
-                continue
-
-            # Check if there's a new commit on this branch
-            if branch not in last_commit_per_branch or current_commit != last_commit_per_branch[branch]:
-                message = (
-                    f"🚨 *New Commit Detected*\n"
-                    f"• *Branch*: `{branch}`\n"
-                    f"• *Commit Hash*: `{current_commit}`\n"
-                    f"• *Message*: {get_commit_message(current_commit)}\n"
-                )
-                print(message)
-                telegram_bot.send_message(message)
-
-                # Load the config file from this specific commit
-                config = load_config_from_commit(current_commit)
-
-                # Skip if config is missing or AUTOCOMMIT is not enabled
-                if not config or not config.get("AUTOCOMMIT", False):
-                    message = (
-                        f"⚠️ *Skipping Submission*\n"
-                        f"• *Reason*: AUTOCOMMIT is disabled or config is missing.\n"
-                        f"• *Branch*: `{branch}`\n"
-                        f"• *Commit Hash*: `{current_commit}`"
-                    )
-                    print(message)
-                    telegram_bot.send_message(message)
-                    last_commit_per_branch[branch] = current_commit
-                    save_last_commits(last_commit_per_branch)
-                    continue
-
-                # Reset the repository to the specific commit
-                reset_to_commit(current_commit)
-
-                # Check for compiler errors and warnings
-                if not check_for_compiler_errors(config):
-                    message = (
-                        f"❌ *Compilation Failed*\n"
-                        f"• *Branch*: `{branch}`\n"
-                        f"• *Commit Hash*: `{current_commit}`\n"
-                        f"• *Warnings Allowed*: {config.get('ALLOW_WARNINGS', False)}\n"
-                        f"• *Errors Allowed*: {config.get('ALLOW_ERRORS', False)}"
-                    )
-                    print(message)
-                    telegram_bot.send_message(message)
-                    last_commit_per_branch[branch] = current_commit
-                    save_last_commits(last_commit_per_branch)
-                    continue
-
-                # Create ZIP files based on include paths
-                zip_files, temp_dir = create_zip_files(config)
-
-                try:
-                    # Submit the solution and retrieve the submission ID
-                    submission_id = oioioi_api.submit_solution(config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot)
-                    if submission_id:
-                        oioioi_api.wait_for_results(config["contest_id"], submission_id, telegram_bot)
-
-                        # Check if this branch should trigger an auto-merge
-                        if branch == config.get("auto_merge_branch"):
-                            grouped_results = oioioi_api.fetch_test_results(config["contest_id"], submission_id)
-
-                            # Ensure all tests passed before merging
-                            if grouped_results and not any(
-                                "error" in test["result"].lower()
-                                for group in grouped_results.values()
-                                for test in group["tests"]
-                            ):
-                                perform_auto_merge(branch, grouped_results, current_commit)
-                            else:
-                                telegram_bot.send_message(
-                                    f"⚠️ *Auto-Merge Skipped*\n"
-                                    f"Branch `{branch}` was not merged into `{Config.PRIMARY_BRANCH}` due to test failures."
-                                )
-
-                finally:
-                    # Ensure the temporary directory is cleaned up
-                    temp_dir.cleanup()
-
-                # Update the last processed commit for this branch and save to file
-                last_commit_per_branch[branch] = current_commit
-                save_last_commits(last_commit_per_branch)
+            process_branch(branch, last_commit_per_branch, oioioi_api, telegram_bot)
 
         time.sleep(Config.CHECK_INTERVAL)
 
