@@ -1,8 +1,7 @@
 import time
 import signal
-import subprocess
 from config.config import Config
-from git_manager.git_operations import (load_last_commits, save_last_commits, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
+from git_manager.git_operations import (get_commit_message, load_last_commits, save_last_commits, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files
@@ -33,15 +32,11 @@ def main():
 
             # Check if there's a new commit on this branch
             if branch not in last_commit_per_branch or current_commit != last_commit_per_branch[branch]:
-                commit_message = subprocess.check_output(
-                    ["git", "-C", Config.REPO_PATH, "log", "-1", "--pretty=%B", current_commit]
-                ).strip().decode('utf-8')
-
                 message = (
                     f"🚨 *New Commit Detected*\n"
                     f"• *Branch*: `{branch}`\n"
                     f"• *Commit Hash*: `{current_commit}`\n"
-                    f"• *Message*: {commit_message}\n"
+                    f"• *Message*: {get_commit_message(current_commit)}\n"
                 )
                 print(message)
                 telegram_bot.send_message(message)

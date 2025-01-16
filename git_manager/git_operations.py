@@ -5,6 +5,18 @@ from config.config import Config
 
 LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
 
+def get_commit_message(commit_hash):
+    """
+    Retrieve the commit message for the specified commit hash.
+    """
+    try:
+        commit_message = subprocess.check_output(
+            ["git", "-C", Config.REPO_PATH, "log", "-1", "--pretty=%B", commit_hash]
+        ).strip().decode('utf-8')
+        return commit_message
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to retrieve commit message for {commit_hash}: {str(e)}")
+
 def load_last_commits():
     """Load the last processed commit hashes from a file."""
     if os.path.exists(LAST_COMMITS_FILE):
