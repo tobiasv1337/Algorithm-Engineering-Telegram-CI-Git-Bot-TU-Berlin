@@ -1,6 +1,7 @@
 import os
 import tempfile
 from zipfile import ZipFile
+from config.config import Config
 
 def create_zip_files(config):
     """

@@ -1,119 +1,17 @@
-import os
 import time
-import json
 import signal
 import subprocess
-import tempfile
-from bs4 import BeautifulSoup
-from zipfile import ZipFile
-from handlers import LANGUAGE_HANDLERS # Import language handlers
-from handlers.base_handler import CompilationError
 from config.config import Config
-from git_manager.git_operations import (fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
+from git_manager.git_operations import (load_last_commits, save_last_commits, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files
 from utils.system import handle_shutdown_signal, shutdown_flag
-
-LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
-
-def load_last_commits():
-    """Load the last processed commit hashes from a file."""
-    if os.path.exists(LAST_COMMITS_FILE):
-        with open(LAST_COMMITS_FILE, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_last_commits(last_commit_per_branch):
-    """Save the last processed commit hashes to a file."""
-    with open(LAST_COMMITS_FILE, 'w') as f:
-        json.dump(last_commit_per_branch, f)
-
-last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
-
-def check_for_compiler_errors(config, telegram_bot):
-    """
-    Run a compilation check for each project specified in the configuration.
-    Uses language-specific handlers to process each project in a temporary directory. Handles errors and warnings based on configuration flags.
-    Creates ZIP files first, extracts them to temporary directories, and checks each project for compilation errors.
-    """
-    language = config.get("language")
-    if not language:
-        message = (
-            "❌ *Error*: The language is not specified in the submission configuration.\n"
-            "Please specify a language (e.g., 'rust', 'cpp').\n\n"
-            f"🛠 Supported languages: {', '.join(LANGUAGE_HANDLERS.keys())}"
-        )
-        print(message)
-        telegram_bot.send_message(message)
-        return False
-
-    if language not in LANGUAGE_HANDLERS:
-        message = (
-            f"❌ *Error*: Unsupported language '{language}'.\n"
-            f"🛠 Supported languages are: {', '.join(LANGUAGE_HANDLERS.keys())}.\n\n"
-            "💡 If you need support for this language, please contact the bot administrator."
-        )
-        print(message)
-        telegram_bot.send_message(message)
-        return False
-
-    handler = LANGUAGE_HANDLERS[language]
-
-    zip_files, temp_dir = create_zip_files(config)
-    all_projects_meet_criteria = True
-
-    for zip_file in zip_files:
-        with tempfile.TemporaryDirectory() as temp_dir_extract:
-            try:
-                with ZipFile(zip_file, 'r') as zip_ref:
-                    zip_ref.extractall(temp_dir_extract)
-
-                try:
-                    result = handler.compile(temp_dir_extract)
-
-                    if result.warnings:
-                        warning_message = (
-                            f"⚠️ *Warnings Detected in {os.path.basename(zip_file)}*\n\n"
-                            f"{result.warnings}"
-                        )
-                        print(warning_message)
-                        telegram_bot.send_message(warning_message)
-
-                        if not config.get("ALLOW_WARNINGS", False):
-                            all_projects_meet_criteria = False
-                            break
-
-                    print(f"✅ Compilation check completed successfully for {os.path.basename(zip_file)}.")
-
-                except CompilationError as e:
-                    error_message = (
-                        f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{str(e)}"
-                    )
-                    print(error_message)
-                    telegram_bot.send_message(error_message)
-
-                    if not config.get("ALLOW_ERRORS", False):
-                        all_projects_meet_criteria = False
-                        break
-
-            except Exception as e:
-                unexpected_error_message = (
-                    f"❌ *Unexpected Error During Compilation Check*\n\n"
-                    f"Project: `{os.path.basename(zip_file)}`\n"
-                    f"Error: {str(e)}"
-                )
-                print(unexpected_error_message)
-                telegram_bot.send_message(unexpected_error_message)
-                all_projects_meet_criteria = False
-                break
-
-    temp_dir.cleanup()
-    return all_projects_meet_criteria
+from handlers.compilation_manager import check_for_compiler_errors
 
 def main():
     global shutdown_flag
-    global last_commit_per_branch
+    last_commit_per_branch = load_last_commits()  # Initialize with saved data if available
 
     oioioi_api = OioioiAPI(Config.OIOIOI_BASE_URL, Config.OIOIOI_USERNAME, Config.OIOIOI_PASSWORD)
     oioioi_api.login()

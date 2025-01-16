@@ -1,6 +1,21 @@
+import os
 import subprocess
 import json
 from config.config import Config
+
+LAST_COMMITS_FILE = "last_commits.json"  # File to store last processed commit for each branch
+
+def load_last_commits():
+    """Load the last processed commit hashes from a file."""
+    if os.path.exists(LAST_COMMITS_FILE):
+        with open(LAST_COMMITS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_last_commits(last_commit_per_branch):
+    """Save the last processed commit hashes to a file."""
+    with open(LAST_COMMITS_FILE, 'w') as f:
+        json.dump(last_commit_per_branch, f)
 
 def fetch_all_branches(telegram_bot):
     """Fetch all branches from the remote repository and handle fetch errors."""
