@@ -1,6 +1,5 @@
-import signal
-
 shutdown_flag = False
+
 
 def handle_shutdown_signal(signum, frame):
     """Signal handler to set the shutdown flag."""

@@ -5,6 +5,7 @@ from handlers import LANGUAGE_HANDLERS
 from utils.file_operations import create_zip_files
 from handlers.base_handler import CompilationError
 
+
 def check_for_compiler_errors(config, telegram_bot):
     """
     Run a compilation check for each project specified in the configuration.

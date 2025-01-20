@@ -1,5 +1,6 @@
 import requests
 
+
 class TelegramBot:
     def __init__(self, token):
         """

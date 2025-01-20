@@ -1,7 +1,7 @@
 import os
 import subprocess
 import json
-from utils.file_operations import save_chat_config, load_chat_config
+from utils.file_operations import load_chat_config
 
 # Centralized file for storing last commits
 LAST_COMMITS_FILE = "data/last_commits.json"
@@ -9,12 +9,14 @@ LAST_COMMITS_FILE = "data/last_commits.json"
 # Ensure the data directory exists
 os.makedirs(os.path.dirname(LAST_COMMITS_FILE), exist_ok=True)
 
+
 # Path Helper Functions
 def get_chat_dir(chat_id):
     """
     Get the data directory for a given chat ID.
     """
     return os.path.join("data", str(chat_id))
+
 
 def get_repo_path(chat_id):
     """
@@ -141,7 +143,7 @@ def clone_repository(chat_id, repo_url, telegram_bot):
             # Handle cases with no authentication
             subprocess.run(["git", "clone", repo_url, repo_path], check=True)
 
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         # Mask credentials in the error message
         safe_repo_url = mask_url_credentials(repo_url)
         telegram_bot.send_message(
@@ -193,7 +195,7 @@ def get_latest_commit(chat_id, branch, telegram_bot):
             telegram_bot,
             f"⚠️ *Git Warning: Branch Missing*\nBranch: `{branch}` is unavailable."
         )
-    except RuntimeError as e:
+    except RuntimeError:
         return None
 
 

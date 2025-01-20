@@ -1,6 +1,7 @@
 import subprocess
 from .base_handler import LanguageHandler, CompilationError, CompilationResult
 
+
 class RustHandler(LanguageHandler):
     @staticmethod
     def compile(temp_dir):

@@ -129,7 +129,7 @@ class OioioiAPI:
             print(message)
             telegram_bot.send_message(message)
             return None
-    
+
     def get_results_url(self, contest_id, submission_id):
         """
         Generate the results URL for a specific contest and submission ID.

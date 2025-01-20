@@ -5,6 +5,7 @@ from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
 from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir
 from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
 
+
 def reset_user_data(context):
     """
     Reset all temporary keys in context.user_data.
@@ -61,7 +62,6 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle the /update command to let users update their configuration values.
     """
-    chat_id = update.effective_chat.id
 
     # Show available options for updating
     options = [

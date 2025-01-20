@@ -2,9 +2,9 @@ import re
 import time
 import os
 import json
-from config.config import Config
 
 SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
+
 
 def parse_numeric_value(value):
     """
@@ -20,6 +20,7 @@ def parse_numeric_value(value):
         return float(cleaned_value)
     except (ValueError, IndexError):
         return 0.0  # Return 0.0 if conversion fails
+
 
 def format_results_message(grouped_results, results_url):
     """
@@ -109,7 +110,7 @@ def compare_results(contest_id, grouped_results):
         elif diff_successful < 0:
             summary.append(f"⚠️ *Regression*: {abs(diff_successful)} fewer tests passed.")
         else:
-            summary.append(f"ℹ️ *No Changes*: The same number of tests passed.")
+            summary.append("ℹ️ *No Changes*: The same number of tests passed.")
 
         summary.append(f"• *Total Successful Tests*: {current_successful}")
         summary.append(f"• *Runtime*: {'Faster' if diff_runtime < 0 else 'Slower'} by {abs(diff_runtime):.2f}s")
@@ -208,17 +209,18 @@ def compare_results(contest_id, grouped_results):
 
     return f"{comparison_message}\n\n*Group Details:*\n{group_changes_message}"
 
+
 def send_results_summary_to_telegram(contest_id, grouped_results, results_url, telegram_bot):
     """
     Send a detailed summary of improvements and results via Telegram.
     """
     # Generate detailed results messages
     detailed_messages = format_results_message(grouped_results, results_url)
-    
+
     # Generate improvement summary
     improvement_summary = compare_results(contest_id, grouped_results)
     summary_message = f"🚀 *Improvement Summary*:\n{improvement_summary}\n\n📥 [View Full Results Here]({results_url})"
-    
+
     # Send detailed test results first
     for message in detailed_messages:
         telegram_bot.send_message(message)
@@ -226,12 +228,14 @@ def send_results_summary_to_telegram(contest_id, grouped_results, results_url, t
     # Send the improvement summary after detailed results
     telegram_bot.send_message(summary_message)
 
+
 def load_submission_history():
     """Load historical submission data from a file."""
     if os.path.exists(SUBMISSION_HISTORY_FILE):
         with open(SUBMISSION_HISTORY_FILE, 'r') as f:
             return json.load(f)
     return {}
+
 
 def save_submission_history(history):
     """Save historical submission data to a file."""

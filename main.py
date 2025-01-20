@@ -1,7 +1,7 @@
 import time
 import signal
 from config.config import Config
-from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
+from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs
@@ -48,8 +48,8 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
             # Notify user about the submission
             telegram_bot.send_message(
                 chat_id,
-                f"✅ *Submission Accepted*\n"
-                f"Results will be checked periodically."
+                "✅ *Submission Accepted*\n"
+                "Results will be checked periodically."
             )
     finally:
         temp_dir.cleanup()
@@ -158,6 +158,7 @@ def main():
                 )
 
         time.sleep(Config.CHECK_INTERVAL)
+
 
 if __name__ == "__main__":
     # Register signal handlers

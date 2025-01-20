@@ -29,6 +29,7 @@ def save_chat_config(chat_id, config_data):
     with open(CONFIG_FILE_PATH, "w") as file:
         json.dump(existing_data, file, indent=4)
 
+
 def load_chat_config(chat_id):
     """
     Load configuration data for a specific chat ID.
@@ -36,6 +37,7 @@ def load_chat_config(chat_id):
     """
     all_configs = get_all_chat_configs()
     return all_configs.get(str(chat_id), None)
+
 
 def get_all_chat_configs():
     """
@@ -48,6 +50,7 @@ def get_all_chat_configs():
     with open(CONFIG_FILE_PATH, "r") as file:
         return json.load(file)
 
+
 def delete_chat_config(chat_id):
     """
     Delete configuration data for a specific chat ID.
@@ -57,6 +60,7 @@ def delete_chat_config(chat_id):
         del all_configs[str(chat_id)]
         with open(CONFIG_FILE_PATH, "w") as file:
             json.dump(all_configs, file, indent=4)
+
 
 def create_zip_files(config, chat_id):
     """

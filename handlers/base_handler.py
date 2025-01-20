@@ -1,12 +1,15 @@
 from abc import ABC, abstractmethod
 
+
 class CompilationResult:
     def __init__(self, warnings=None, errors=None):
         self.warnings = warnings or []
         self.errors = errors or []
 
+
 class CompilationError(Exception):
     pass
+
 
 class LanguageHandler(ABC):
     @staticmethod
