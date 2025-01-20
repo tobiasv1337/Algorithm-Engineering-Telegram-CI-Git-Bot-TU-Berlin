@@ -5,7 +5,7 @@ from git_manager.git_operations import (get_commit_message, load_last_commit, sa
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs
-from utils.system import handle_shutdown_signal, shutdown_flag
+from utils.system import handle_shutdown_signal, ShutdownSignal
 from handlers.compilation_manager import check_for_compiler_errors
 
 
@@ -144,7 +144,7 @@ def main():
 
     telegram_bot = TelegramBot(Config.TELEGRAM_BOT_TOKEN)
 
-    while not shutdown_flag:
+    while not ShutdownSignal.flag:
         all_chat_configs = get_all_chat_configs()
         chat_ids = all_chat_configs.keys()
 
