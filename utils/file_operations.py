@@ -1,14 +1,76 @@
 import os
+import json
 import tempfile
 from zipfile import ZipFile
-from config.config import Config
+from git_manager.git_operations import get_repo_path
 
-def create_zip_files(config):
+# Define the path for the central configuration file
+CONFIG_FILE_PATH = "data/config.json"
+
+# Ensure the data directory exists
+os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+
+
+# Centralized Configuration Management
+
+def save_chat_config(chat_id, config_data):
     """
-    Create multiple ZIP files based on the `zip_files` configuration in the submission config.
+    Save configuration data for a specific chat ID.
+    If the central JSON file does not exist, it will be created.
+    """
+    # Load existing data
+    existing_data = get_all_chat_configs()
+
+    # Update or add the chat-specific configuration
+    existing_data[str(chat_id)] = existing_data.get(str(chat_id), {})
+    existing_data[str(chat_id)].update(config_data)
+
+    # Save the updated data back to the JSON file
+    with open(CONFIG_FILE_PATH, "w") as file:
+        json.dump(existing_data, file, indent=4)
+
+def load_chat_config(chat_id):
+    """
+    Load configuration data for a specific chat ID.
+    Returns None if no configuration exists for the given chat ID.
+    """
+    all_configs = get_all_chat_configs()
+    return all_configs.get(str(chat_id), None)
+
+def get_all_chat_configs():
+    """
+    Load all configurations from the central JSON file.
+    Returns an empty dictionary if the file does not exist.
+    """
+    if not os.path.exists(CONFIG_FILE_PATH):
+        return {}
+
+    with open(CONFIG_FILE_PATH, "r") as file:
+        return json.load(file)
+
+def delete_chat_config(chat_id):
+    """
+    Delete configuration data for a specific chat ID.
+    """
+    all_configs = get_all_chat_configs()
+    if str(chat_id) in all_configs:
+        del all_configs[str(chat_id)]
+        with open(CONFIG_FILE_PATH, "w") as file:
+            json.dump(all_configs, file, indent=4)
+
+def create_zip_files(config, chat_id):
+    """
+    Create multiple ZIP files based on the `zip_files` configuration provided.
     Allows specifying destination paths for files and folders within the ZIP.
     Returns a list of created ZIP file paths and the temporary directory used.
+
+    Parameters:
+        config (dict): Configuration dictionary containing "zip_files".
+        chat_id (int or str): Chat ID to determine the repository path.
     """
+    # Get the repository path using the chat ID
+    repo_path = get_repo_path(chat_id)
+
     zip_files = config.get("zip_files", [])
     temp_dir = tempfile.TemporaryDirectory()  # Create a temporary directory for ZIP files
     created_files = []
@@ -20,11 +82,11 @@ def create_zip_files(config):
 
         with ZipFile(zip_path, 'w') as zipf:
             for path_mapping in include_paths:
-                source_path = os.path.join(Config.REPO_PATH, os.path.normpath(path_mapping["source"]))
+                source_path = os.path.join(repo_path, os.path.normpath(path_mapping["source"]))
                 destination_path = os.path.normpath(path_mapping["destination"])
 
                 # Verify that each path is within the repository and not a symlink
-                if not source_path.startswith(Config.REPO_PATH) or os.path.islink(source_path):
+                if not source_path.startswith(repo_path) or os.path.islink(source_path):
                     print(f"Skipping unsafe or invalid path: '{source_path}'")
                     continue
 
