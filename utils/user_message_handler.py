@@ -1,7 +1,13 @@
+import os
+import shutil
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
-from git_manager.git_operations import generate_ssh_key, clone_repository
-from utils.file_operations import save_chat_config, load_chat_config
+from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir
+from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
+
+# Dictionary to track pending deletion requests
+PENDING_DELETIONS = {}
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -20,6 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Hello, {user}! Let's set up your repository.")
     await update.message.reply_text("What is the repository URL?")
     context.user_data["config_step"] = "repo_url"
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -82,6 +89,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["oioioi_password"] = update.message.text
         complete_setup(chat_id, context)
 
+
 def complete_setup(chat_id, context):
     """
     Finalize repository setup and save the configuration.
@@ -106,9 +114,85 @@ def complete_setup(chat_id, context):
 
     context.bot.send_message(chat_id, "✅ Repository and OIOIOI setup are complete and ready for use.")
 
+
+async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle the /delete command to initiate deletion of user data.
+    """
+    chat_id = update.effective_chat.id
+
+    # Check if deletion is already pending
+    if PENDING_DELETIONS.get(chat_id):
+        await update.message.reply_text(
+            "Deletion is already pending confirmation. "
+            "Run /delete confirm to proceed or /delete cancel to abort."
+        )
+        return
+
+    # Set pending deletion flag
+    PENDING_DELETIONS[chat_id] = True
+    await update.message.reply_text(
+        "Are you sure you want to delete your configuration and repository? "
+        "This action is irreversible. Run /delete confirm to proceed or /delete cancel to abort."
+    )
+
+
+async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle the /delete confirm command to finalize deletion.
+    """
+    chat_id = update.effective_chat.id
+
+    # Check if deletion is pending
+    if not PENDING_DELETIONS.get(chat_id):
+        await update.message.reply_text("No deletion is pending. Run /delete to initiate the process.")
+        return
+
+    # Proceed with deletion
+    try:
+        delete_user_data(chat_id)
+        await update.message.reply_text("✅ Your configuration and repository have been deleted.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed to delete your data: {e}")
+    finally:
+        PENDING_DELETIONS.pop(chat_id, None)
+
+
+async def delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle the /delete cancel command to abort deletion.
+    """
+    chat_id = update.effective_chat.id
+
+    # Check if deletion is pending
+    if not PENDING_DELETIONS.get(chat_id):
+        await update.message.reply_text("No deletion is pending.")
+        return
+
+    # Cancel the deletion
+    PENDING_DELETIONS.pop(chat_id, None)
+    await update.message.reply_text("❌ Deletion canceled. Your configuration remains intact.")
+
+
+def delete_user_data(chat_id):
+    """
+    Delete user-specific configuration and repository files.
+    """
+    # Delete user-specific configuration
+    delete_chat_config(chat_id)
+
+    # Remove repository directory
+    chat_dir = get_chat_dir(chat_id)
+    if os.path.exists(chat_dir):
+        shutil.rmtree(chat_dir)
+
+
 def initialize_message_handlers(telegram_bot, oioioi_api):
     """
     Register command and message handlers for the Telegram bot.
     """
     telegram_bot.add_handler(CommandHandler("start", start))
+    telegram_bot.add_handler(CommandHandler("delete", delete))
+    telegram_bot.add_handler(CommandHandler("delete confirm", delete_confirm))
+    telegram_bot.add_handler(CommandHandler("delete cancel", delete_cancel))
     telegram_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
