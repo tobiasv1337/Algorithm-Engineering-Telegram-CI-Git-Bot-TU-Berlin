@@ -4,7 +4,7 @@ import time
 from bs4 import BeautifulSoup
 from config.config import Config
 from utils.results_utils import (parse_numeric_value, send_results_summary_to_telegram)
-from file_operations import load_chat_config
+from utils.file_operations import load_chat_config
 
 
 class OioioiAPI:
