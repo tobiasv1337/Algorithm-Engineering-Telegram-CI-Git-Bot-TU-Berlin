@@ -4,9 +4,12 @@ from config.config import Config
 from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
-from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs
+from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs, load_offset, save_offset
 from utils.system import handle_shutdown_signal, ShutdownSignal
 from handlers.compilation_manager import check_for_compiler_errors
+from datetime import datetime, timedelta
+from utils.user_message_handler import initialize_message_handlers
+from telegram.ext import Application
 
 
 def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram_bot):
@@ -139,25 +142,53 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
     process_pending_submissions(chat_id, oioioi_api, telegram_bot)
 
 
-def main():
-    global shutdown_flag
+def handle_telegram_updates(telegram_bot):
+    """
+    Fetch and process Telegram updates using registered handlers.
+    """
+    offset = load_offset()  # Load the last saved offset
 
+    updates = telegram_bot.get_updates(offset=offset)
+    for update in updates:
+        # Process the update using the dispatcher
+        telegram_bot.dispatcher.process_update(update)
+
+    # Save the new offset after processing updates
+    if updates:
+        new_offset = updates[-1].update_id + 1
+        save_offset(new_offset)
+
+
+def main():
     telegram_bot = TelegramBot(Config.TELEGRAM_BOT_TOKEN)
+    telegram_app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+    initialize_message_handlers(telegram_app)
+
+    last_ci_timestamp = datetime.now()
 
     while not ShutdownSignal.flag:
-        all_chat_configs = get_all_chat_configs()
-        chat_ids = all_chat_configs.keys()
+        # Step 1: Process Telegram updates
+        handle_telegram_updates(telegram_app)
 
-        for chat_id in chat_ids:
-            try:
-                oioioi_api = OioioiAPI(chat_id)
-                process_chat_id(chat_id, oioioi_api, telegram_bot)
-            except Exception as e:
-                telegram_bot.send_message(
-                    chat_id, f"❌ *Error Processing User*\n{str(e)}"
-                )
+        # Step 2: Perform CI tasks periodically
+        if datetime.now() - last_ci_timestamp > timedelta(seconds=Config.CHECK_INTERVAL):
+            all_chat_configs = get_all_chat_configs()
+            chat_ids = all_chat_configs.keys()
 
-        time.sleep(Config.CHECK_INTERVAL)
+            for chat_id in chat_ids:
+                try:
+                    oioioi_api = OioioiAPI(chat_id)
+                    process_chat_id(chat_id, oioioi_api, telegram_bot)
+                except Exception as e:
+                    telegram_bot.send_message(
+                        chat_id, f"❌ *Error Processing User*\n{str(e)}"
+                    )
+
+            last_ci_timestamp = datetime.now()
+
+        time.sleep(1)
+
+    print("Shutting down bot and CI tasks.")
 
 
 if __name__ == "__main__":

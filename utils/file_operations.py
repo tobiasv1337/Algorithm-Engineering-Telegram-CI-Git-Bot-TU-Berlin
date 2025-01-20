@@ -3,8 +3,9 @@ import json
 import tempfile
 from zipfile import ZipFile
 
-# Define the path for the central configuration file
+# Define the path for the json files
 CONFIG_FILE_PATH = "data/config.json"
+OFFSET_FILE = "data/telegram_offset.json"
 
 # Ensure the data directory exists
 os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
@@ -16,6 +17,26 @@ def get_chat_dir(chat_id):
     Get the data directory for a given chat ID.
     """
     return os.path.join("data", str(chat_id))
+
+
+# Offset File for Telegram Updates
+def load_offset():
+    """
+    Load the last processed update offset from a file.
+    """
+    if not os.path.exists(OFFSET_FILE):
+        return None  # If no offset file exists, return None
+    with open(OFFSET_FILE, "r") as file:
+        return json.load(file).get("offset")
+
+
+def save_offset(offset):
+    """
+    Save the last processed update offset to a file.
+    """
+    os.makedirs(os.path.dirname(OFFSET_FILE), exist_ok=True)  # Ensure the directory exists
+    with open(OFFSET_FILE, "w") as file:
+        json.dump({"offset": offset}, file)
 
 
 def get_repo_path(chat_id):
