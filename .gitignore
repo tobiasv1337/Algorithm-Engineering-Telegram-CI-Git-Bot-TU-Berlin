@@ -6,3 +6,5 @@ submission_history.json
 
 .DS_Store
 .vscode
+
+.venv
