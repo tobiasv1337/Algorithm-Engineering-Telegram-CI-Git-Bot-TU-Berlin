@@ -8,31 +8,31 @@ from file_operations import load_chat_config
 
 
 class OioioiAPI:
-    def __init__(self, base_url, username, password):
-        self.base_url = base_url
-        self.username = username
-        self.password = password
-        self.session = None
-    
-    def get_api_key_for_contest(chat_id, contest_id):
+    def __init__(self, chat_id):
         """
-        Retrieve the API key for a specific contest ID from the user's configuration.
-        Raises an exception if no API key is found for the contest.
+        Initialize OioioiAPI with user-specific credentials based on chat_id.
         """
+        self.chat_id = chat_id
+        self.base_url = Config.OIOIOI_BASE_URL
+
+        # Load user-specific credentials
         config = load_chat_config(chat_id)
         if not config:
             raise ValueError(f"No configuration found for chat ID {chat_id}")
 
-        api_keys = config.get("OIOIOI_API_KEYS", {})
-        api_key = api_keys.get(contest_id)
+        self.username = config.get("oioioi_username")
+        self.password = config.get("oioioi_password")
+        self.api_keys = config.get("OIOIOI_API_KEYS", {})
+        self.session = requests.Session()
 
+    def get_api_key_for_contest(self, contest_id):
+        """
+        Retrieve the API key for a specific contest ID.
+        Raises an exception if no API key is found for the contest.
+        """
+        api_key = self.api_keys.get(contest_id)
         if not api_key:
-            message = (
-                f"❌ No API key found for contest '{contest_id}' for chat {chat_id}.\n"
-                f"Please add the API key for this contest using the /update command."
-            )
-            raise KeyError(message)
-
+            raise KeyError(f"❌ No API key found for contest '{contest_id}'. Use /update to add it.")
         return api_key
 
     def login(self):
@@ -42,9 +42,9 @@ class OioioiAPI:
         """
         main_page_url = f"{self.base_url}/"
         login_url = f"{self.base_url}/login/"
-        session = requests.Session()
+        self.session = requests.Session()
 
-        # Step 1: Load the main page to fetch the CSRF token
+        # Load the main page to fetch the CSRF token
         main_page = self.session.get(main_page_url, headers={"User-Agent": "Mozilla/5.0"})
         if main_page.status_code != 200:
             raise Exception(f"Failed to fetch the main page. Status code: {main_page.status_code}")
@@ -56,7 +56,7 @@ class OioioiAPI:
         if not csrf_token_value:
             raise Exception("CSRF token not found on the main page.")
 
-        # Step 2: Perform the login
+        # Perform the login
         payload = {
             "csrfmiddlewaretoken": csrf_token_value,
             "auth-username": self.username,
@@ -73,8 +73,6 @@ class OioioiAPI:
         response = self.session.post(login_url, data=payload, headers=headers)
         if response.status_code != 200 or "Log out" not in response.text:
             raise Exception(f"Login failed. Status code: {response.status_code}")
-        
-        print("🔑 Logged in to OIOIOI.")
 
     def submit_solution(self, contest_id, problem_short_name, zip_files, branch, telegram_bot):
         """
@@ -82,7 +80,7 @@ class OioioiAPI:
         The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
         """
         try:
-            api_key = self.get_api_key_for_contest(chat_id, contest_id)
+            api_key = self.get_api_key_for_contest(contest_id)
         except KeyError:
             message = (
                 f"❌ *Submission Aborted*\n"
@@ -131,7 +129,7 @@ class OioioiAPI:
             print(message)
             telegram_bot.send_message(message)
             return None
-    
+
     def fetch_test_results(self, contest_id, submission_id):
         """
         Fetch and parse the test results or error messages from the HTML report.
@@ -192,7 +190,7 @@ class OioioiAPI:
         except Exception as e:
             print(f"Error fetching or parsing results: {e}")
             return None
-        
+
     def wait_for_results(self, contest_id, submission_id, telegram_bot):
         """
         Poll the results page periodically and send grouped results to Telegram.
