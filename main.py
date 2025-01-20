@@ -1,5 +1,6 @@
 import time
 import signal
+import asyncio
 from config.config import Config
 from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
 from api.oioioi import OioioiAPI
@@ -142,21 +143,22 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
     process_pending_submissions(chat_id, oioioi_api, telegram_bot)
 
 
-def main():
+async def main():
     telegram_bot = TelegramBot(Config.TELEGRAM_BOT_TOKEN)
     telegram_app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
     initialize_message_handlers(telegram_app)
+    await telegram_app.initialize()
 
     last_ci_timestamp = datetime.now()
 
     # Start Telegram polling initially
-    telegram_app.start_polling()
+    await telegram_app.start()
 
     while not ShutdownSignal.flag:
         # Check if it's time for CI tasks
         if datetime.now() - last_ci_timestamp > timedelta(seconds=Config.CHECK_INTERVAL):
             print("🔧 Pausing Telegram polling for CI tasks.")
-            telegram_app.stop()  # Gracefully stop polling
+            await telegram_app.stop()  # Gracefully stop polling
 
             # Perform CI tasks
             all_chat_configs = get_all_chat_configs()
@@ -174,7 +176,7 @@ def main():
             last_ci_timestamp = datetime.now()
 
             print("▶️ Resuming Telegram polling.")
-            telegram_app.start_polling()  # Resume polling after tasks
+            await telegram_app.start()  # Resume polling after tasks
 
         time.sleep(1)
 
@@ -187,4 +189,4 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_shutdown_signal)  # Termination signal
 
     print("Starting script. Press Ctrl+C to stop.")
-    main()
+    asyncio.run(main())
