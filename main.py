@@ -1,7 +1,7 @@
 import time
 import signal
 from config.config import Config
-from git_manager.git_operations import (get_commit_message, load_last_commits, save_last_commits, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
+from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs
@@ -88,14 +88,13 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
     """
     Process a branch for a specific user.
     """
-    last_commit_per_branch = load_last_commits() #TODO:
+    last_commit = load_last_commit(chat_id, branch)
     current_commit = get_latest_commit(branch)
 
-    if not current_commit or current_commit == last_commit_per_branch.get(branch):
+    if not current_commit or current_commit == last_commit:
         return  # No new commit
 
-    last_commit_per_branch[branch] = current_commit
-    save_last_commits(last_commit_per_branch)
+    save_last_commit(chat_id, branch, current_commit)
 
     commit_message = get_commit_message(current_commit)
     telegram_bot.send_message(
@@ -105,6 +104,18 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
         f"• *Commit Hash*: `{current_commit}`\n"
         f"• *Message*: {commit_message}"
     )
+
+    # Load configuration for the commit
+    config = load_config_from_commit(current_commit)
+    if not config or not config.get("AUTOCOMMIT", False):
+        telegram_bot.send_message(
+            chat_id,
+            f"⚠️ *Skipping Submission*\n"
+            f"• *Reason*: AUTOCOMMIT is disabled or config is missing.\n"
+            f"• *Branch*: `{branch}`\n"
+            f"• *Commit Hash*: `{current_commit}`"
+        )
+        return
 
     # Process the commit
     process_commit(chat_id, branch, current_commit, user_config, oioioi_api, telegram_bot)
