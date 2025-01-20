@@ -251,7 +251,7 @@ def delete_user_data(chat_id):
         shutil.rmtree(chat_dir)
 
 
-def initialize_message_handlers(telegram_bot, oioioi_api):
+def initialize_message_handlers(telegram_bot):
     """
     Register command and message handlers for the Telegram bot.
     """
