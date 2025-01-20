@@ -121,14 +121,55 @@ def clone_repository(chat_id, repo_url, telegram_bot):
             env = os.environ.copy()
             env["GIT_SSH_COMMAND"] = git_ssh_command
             subprocess.run(["git", "clone", repo_url, repo_path], check=True, env=env)
+
+        elif access_type == "https":
+            # Embed credentials directly in the URL
+            git_username = config.get("git_username")
+            git_password = config.get("git_password")
+            if not git_username or not git_password:
+                raise ValueError("Missing Git username or password for HTTPS authentication.")
+
+            # Create a URL with credentials
+            repo_url_with_credentials = repo_url.replace(
+                "https://", f"https://{git_username}:{git_password}@"
+            )
+
+            # Clone the repository
+            subprocess.run(["git", "clone", repo_url_with_credentials, repo_path], check=True)
+
         else:
+            # Handle cases with no authentication
             subprocess.run(["git", "clone", repo_url, repo_path], check=True)
+
     except subprocess.CalledProcessError as e:
+        # Mask credentials in the error message
+        safe_repo_url = mask_url_credentials(repo_url)
         telegram_bot.send_message(
             chat_id,
-            f"❌ *Git Error: Clone Failed*\nRepository: `{repo_url}`\nDetails: {str(e)}"
-        )   
-        raise RuntimeError(f"Failed to clone repository: {repo_url}")
+            f"❌ *Git Error: Clone Failed*\nRepository: `{safe_repo_url}`\nDetails: Git command failed."
+        )
+        raise RuntimeError(f"Failed to clone repository: {safe_repo_url}")
+
+    except Exception as e:
+        telegram_bot.send_message(
+            chat_id,
+            f"❌ *Setup Error*: {str(e)}"
+        )
+        raise RuntimeError(f"Setup error during cloning: {e}")
+
+
+def mask_url_credentials(url):
+    """
+    Mask credentials in a URL for secure error reporting.
+    """
+    if "@" in url:
+        # Split the URL to isolate the credentials
+        scheme, rest = url.split("://", 1)
+        if "@" in rest:
+            credentials, host_and_path = rest.split("@", 1)
+            masked_credentials = "****:****"
+            return f"{scheme}://{masked_credentials}@{host_and_path}"
+    return url
 
 
 def fetch_all_branches(chat_id, telegram_bot):
