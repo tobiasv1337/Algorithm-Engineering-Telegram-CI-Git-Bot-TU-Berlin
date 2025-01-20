@@ -14,7 +14,7 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
     Process a new commit: validate, compile, submit, and handle results.
     """
     # Reset to the specific commit
-    reset_to_commit(current_commit)
+    reset_to_commit(chat_id, branch, current_commit)
 
     # Check for compiler errors
     if not check_for_compiler_errors(config):
