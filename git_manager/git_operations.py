@@ -9,18 +9,37 @@ LAST_COMMITS_FILE = "data/last_commits.json"
 # Ensure the data directory exists
 os.makedirs(os.path.dirname(LAST_COMMITS_FILE), exist_ok=True)
 
-
-# Repository Path
+# Path Helper Functions
+def get_chat_dir(chat_id):
+    """
+    Get the data directory for a given chat ID.
+    """
+    return os.path.join("data", str(chat_id))
 
 def get_repo_path(chat_id):
     """
     Get the repository path for a given chat ID.
     """
-    return f"data/{chat_id}/repo"
+    return os.path.join(get_chat_dir(chat_id), "repo")
+
+
+# SSH Key Management
+def generate_ssh_key(chat_id):
+    """
+    Generate an SSH key pair for the user and store it in their data directory.
+    """
+    chat_dir = get_chat_dir(chat_id)
+    ssh_key_path = os.path.join(chat_dir, "id_rsa")
+
+    if not os.path.exists(chat_dir):
+        os.makedirs(chat_dir)
+
+    subprocess.run(["ssh-keygen", "-t", "rsa", "-b", "4096", "-f", ssh_key_path, "-N", ""])
+
+    return ssh_key_path
 
 
 # Last Commit Management
-
 def load_last_commit(chat_id, branch="submit"):
     """
     Load the last commit hash for a given chat ID and branch from the centralized JSON file.
@@ -32,6 +51,7 @@ def load_last_commit(chat_id, branch="submit"):
         last_commits = json.load(file)
 
     return last_commits.get(str(chat_id), {}).get(branch, None)
+
 
 def save_last_commit(chat_id, branch, commit_hash):
     """
@@ -52,70 +72,121 @@ def save_last_commit(chat_id, branch, commit_hash):
         json.dump(last_commits, file, indent=4)
 
 
-# Repository Operations
-
-def get_latest_commit(chat_id, branch, telegram_bot):
+# Helper Function for Git Commands
+def execute_git_command(chat_id, command, telegram_bot=None, failure_message=None):
     """
-    Get the latest commit hash on the specified branch for a given chat ID.
+    Execute a Git command with the appropriate SSH key for the given chat ID.
     """
     repo_path = get_repo_path(chat_id)
+    config = load_chat_config(chat_id)
+    access_type = config.get("access_type", "https")  # Default to HTTPS
+
+    # Prepare environment for SSH if needed
+    env = os.environ.copy()
+    if access_type == "ssh":
+        ssh_key_path = os.path.join(get_chat_dir(chat_id), "id_rsa")
+        git_ssh_command = f"ssh -i {ssh_key_path} -o IdentitiesOnly=yes"
+        env["GIT_SSH_COMMAND"] = git_ssh_command
+
     try:
-        commit_hash = subprocess.check_output(
-            ["git", "-C", repo_path, "rev-parse", f"origin/{branch}"],
-            text=True
+        # Execute the Git command
+        result = subprocess.check_output(
+            ["git", "-C", repo_path] + command,
+            env=env,
+            text=True,
         ).strip()
-        return commit_hash
+        return result
     except subprocess.CalledProcessError as e:
-        warning_message = f"⚠️ *Git Warning: Branch Missing*\nBranch: `{branch}`\nDetails: {str(e)}"
-        print(warning_message)
-        telegram_bot.send_message(chat_id, warning_message)
-        return None
+        if telegram_bot and failure_message:
+            telegram_bot.send_message(chat_id, failure_message)
+        raise RuntimeError(f"Git command failed: {e}")
+
+
+# Repository Operations
+def clone_repository(chat_id, repo_url, telegram_bot):
+    """
+    Clone a repository using the appropriate authentication method (HTTPS or SSH).
+    """
+    repo_path = get_repo_path(chat_id)
+    config = load_chat_config(chat_id)
+    access_type = config.get("access_type")
+
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
+
+    try:
+        if access_type == "ssh":
+            ssh_key_path = os.path.join(get_chat_dir(chat_id), "id_rsa")
+            git_ssh_command = f"ssh -i {ssh_key_path} -o IdentitiesOnly=yes"
+            env = os.environ.copy()
+            env["GIT_SSH_COMMAND"] = git_ssh_command
+            subprocess.run(["git", "clone", repo_url, repo_path], check=True, env=env)
+        else:
+            subprocess.run(["git", "clone", repo_url, repo_path], check=True)
+    except subprocess.CalledProcessError as e:
+        telegram_bot.send_message(
+            chat_id,
+            f"❌ *Git Error: Clone Failed*\nRepository: `{repo_url}`\nDetails: {str(e)}"
+        )   
+        raise RuntimeError(f"Failed to clone repository: {repo_url}")
+
 
 def fetch_all_branches(chat_id, telegram_bot):
     """
     Fetch all branches from the remote repository for the given chat ID.
     """
-    repo_path = get_repo_path(chat_id)
     try:
-        subprocess.run(["git", "-C", repo_path, "fetch", "--all"], check=True)
-    except subprocess.CalledProcessError as e:
-        error_message = f"❌ *Git Error: Fetch Failed*\n\n{str(e)}"
-        print(error_message)
-        telegram_bot.send_message(chat_id, error_message)
+        execute_git_command(chat_id, ["fetch", "--all"], telegram_bot, "❌ *Git Error: Fetch Failed*")
+    except RuntimeError as e:
         raise RuntimeError("Error fetching branches") from e
 
-def get_commit_message(chat_id, commit_hash):
+
+def get_latest_commit(chat_id, branch, telegram_bot):
+    """
+    Get the latest commit hash on the specified branch for a given chat ID.
+    """
+    try:
+        return execute_git_command(
+            chat_id,
+            ["rev-parse", f"origin/{branch}"],
+            telegram_bot,
+            f"⚠️ *Git Warning: Branch Missing*\nBranch: `{branch}` is unavailable."
+        )
+    except RuntimeError as e:
+        return None
+
+
+def get_commit_message(chat_id, commit_hash, telegram_bot=None):
     """
     Retrieve the commit message for the specified commit hash in the user's repository.
     """
-    repo_path = get_repo_path(chat_id)
-    try:
-        commit_message = subprocess.check_output(
-            ["git", "-C", repo_path, "log", "-1", "--pretty=%B", commit_hash],
-            text=True
-        ).strip()
-        return commit_message
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to retrieve commit message for {commit_hash}: {str(e)}")
+    failure_message = (
+        f"❌ *Git Error: Commit Message Retrieval Failed*\n"
+        f"Commit: `{commit_hash}`\n"
+        f"Unable to retrieve the commit message. Please ensure the commit exists."
+    )
+    return execute_git_command(
+        chat_id,
+        ["log", "-1", "--pretty=%B", commit_hash],
+        telegram_bot,
+        failure_message
+    )
+
 
 def reset_to_commit(chat_id, branch, commit_hash, telegram_bot):
     """
     Reset the repository to the specified commit for the given chat ID.
     """
-    repo_path = get_repo_path(chat_id)
     try:
-        subprocess.run(["git", "-C", repo_path, "checkout", branch], check=True)
-        subprocess.run(["git", "-C", repo_path, "reset", "--hard", commit_hash], check=True)
-        print(f"Reset branch {branch} to commit {commit_hash}")
-    except subprocess.CalledProcessError as e:
-        error_message = (
-            f"❌ *Git Error: Reset Failed*\n"
-            f"Branch: `{branch}`\n"
-            f"Commit: `{commit_hash}`\n"
-            f"Details: {str(e)}"
+        execute_git_command(chat_id, ["checkout", branch])
+        execute_git_command(chat_id, ["reset", "--hard", commit_hash])
+    except RuntimeError as e:
+        telegram_bot.send_message(
+            chat_id,
+            f"❌ *Git Error: Reset Failed*\nBranch: `{branch}`\nCommit: `{commit_hash}`\nDetails: {str(e)}"
         )
-        telegram_bot.send_message(chat_id, error_message)
-        raise RuntimeError(f"Error resetting branch {branch} to commit {commit_hash}") from e
+        raise RuntimeError(f"Error resetting branch {branch} to commit {commit_hash}")
+
 
 def get_tracked_branches(chat_id, telegram_bot):
     """
@@ -129,40 +200,36 @@ def get_tracked_branches(chat_id, telegram_bot):
     primary_branch_commit = get_latest_commit(chat_id, primary_branch, telegram_bot)
     if primary_branch_commit:
         try:
-            # Load configuration from the specific commit
             config = load_config_from_commit(chat_id, primary_branch_commit)
             if config and "branches" in config:
                 return config["branches"]
         except FileNotFoundError:
-            error_message = (
-                f"❌ *Configuration Missing*\n"
-                f"The `submission_config.json` file is missing from the latest commit on branch `{primary_branch}`.\n"
-                f"Please add the configuration file and push the changes."
+            telegram_bot.send_message(
+                chat_id,
+                f"❌ *Configuration Missing*\nMissing `submission_config.json` on `{primary_branch}`."
             )
-            telegram_bot.send_message(chat_id, error_message)
 
-    fallback_message = (
-        f"⚠️ *Using Fallback Branch*\n"
-        f"Tracking the primary branch `{primary_branch}` as no other branches were specified."
+    telegram_bot.send_message(
+        chat_id,
+        f"⚠️ *Using Fallback Branch*\nDefaulting to `{primary_branch}`."
     )
-    telegram_bot.send_message(chat_id, fallback_message)
-
     # Default to the primary branch if no tracking branches are found
     return [primary_branch]
+
 
 def load_config_from_commit(chat_id, commit_hash, config_filename="submission_config.json"):
     """
     Load submission configuration from a specific commit.
     """
-    repo_path = get_repo_path(chat_id)
     try:
-        config_data = subprocess.check_output(["git", "-C", repo_path, "show", f"{commit_hash}:{config_filename}"])
+        config_data = execute_git_command(
+            chat_id,
+            ["show", f"{commit_hash}:{config_filename}"],
+        )
         return json.loads(config_data)
-    except subprocess.CalledProcessError:
+    except RuntimeError:
         raise FileNotFoundError(f"Configuration file '{config_filename}' not found in commit {commit_hash}.")
 
-
-# Auto Merge
 
 def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_bot):
     """
@@ -170,8 +237,6 @@ def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_b
     Includes a short summary of test results in the commit message.
     Only performs the merge if there are no conflicts.
     """
-    # Get repository path and primary branch
-    repo_path = get_repo_path(chat_id)
     global_config = load_chat_config(chat_id)
     primary_branch = global_config.get("PRIMARY_BRANCH", "main")
 
@@ -184,93 +249,98 @@ def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_b
         test_summary = f"Tests Passed: {passed_tests}/{total_tests}"
 
         # Step 2: Fetch the latest changes for the branch
-        fetch_result = subprocess.run(
-            ["git", "-C", repo_path, "fetch", "origin", branch],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        fetch_failure_message = (
+            f"❌ *Auto-Merge Failed*\n"
+            f"Failed to fetch the latest changes for `{branch}`. Merge aborted."
         )
-        if fetch_result.returncode != 0:
-            telegram_bot.send_message(
-                chat_id,
-                f"❌ *Auto-Merge Failed*\n"
-                f"Failed to fetch the latest changes for `{branch}`. Merge aborted.\n"
-                f"Details:\n```\n{fetch_result.stderr.strip()}\n```"
-            )
-            return
+        execute_git_command(
+            chat_id,
+            ["fetch", "origin", branch],
+            telegram_bot,
+            fetch_failure_message
+        )
 
         # Step 3: Reset the branch to the specified commit hash
-        reset_result = subprocess.run(
-            ["git", "-C", repo_path, "checkout", "-B", branch, commit_hash],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        reset_failure_message = (
+            f"❌ *Auto-Merge Failed*\n"
+            f"Failed to reset branch `{branch}` to commit `{commit_hash}`. Merge aborted."
         )
-        if reset_result.returncode != 0:
-            telegram_bot.send_message(
-                chat_id,
-                f"❌ *Auto-Merge Failed*\n"
-                f"Failed to reset branch `{branch}` to commit `{commit_hash}`. Merge aborted.\n"
-                f"Details:\n```\n{reset_result.stderr.strip()}\n```"
-            )
-            return
+        execute_git_command(
+            chat_id,
+            ["checkout", "-B", branch, commit_hash],
+            telegram_bot,
+            reset_failure_message
+        )
 
         # Step 4: Checkout the primary branch
-        subprocess.run(["git", "-C", repo_path, "checkout", primary_branch], check=True)
+        checkout_failure_message = (
+            f"❌ *Auto-Merge Failed*\n"
+            f"Failed to checkout the primary branch `{primary_branch}`. Merge aborted."
+        )
+        execute_git_command(
+            chat_id,
+            ["checkout", primary_branch],
+            telegram_bot,
+            checkout_failure_message
+        )
 
         # Step 5: Pull the latest changes for the primary branch
-        pull_result = subprocess.run(
-            ["git", "-C", repo_path, "pull", "origin", primary_branch],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        pull_failure_message = (
+            f"❌ *Auto-Merge Failed*\n"
+            f"Failed to pull the latest changes for `{primary_branch}`. Merge aborted."
         )
-        if pull_result.returncode != 0:
-            telegram_bot.send_message(
-                chat_id,
-                f"❌ *Auto-Merge Failed*\n"
-                f"Failed to pull the latest changes for `{primary_branch}`. Merge aborted.\n"
-                f"Details:\n```\n{pull_result.stderr.strip()}\n```"
-            )
-            return
+        execute_git_command(
+            chat_id,
+            ["pull", "origin", primary_branch],
+            telegram_bot,
+            pull_failure_message
+        )
 
         # Step 6: Merge the branch into the primary branch with --no-commit and --no-ff
-        merge_result = subprocess.run(
-            ["git", "-C", repo_path, "merge", "--no-commit", "--no-ff", branch],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        merge_failure_message = (
+            f"⚠️ *Merge Conflict Detected*\n"
+            f"Branch `{branch}` could not be merged into `{primary_branch}` due to conflicts."
         )
-        if "CONFLICT" in merge_result.stderr:
-            telegram_bot.send_message(
+        try:
+            execute_git_command(
                 chat_id,
-                f"⚠️ *Merge Conflict Detected*\n"
-                f"Branch `{branch}` could not be merged into `{primary_branch}` due to conflicts.\n"
-                f"Details:\n```\n{merge_result.stderr.strip()}\n```"
+                ["merge", "--no-commit", "--no-ff", branch],
+                telegram_bot,
+                merge_failure_message
             )
-            # Abort the merge
-            subprocess.run(["git", "-C", repo_path, "merge", "--abort"], check=True)
+        except RuntimeError:
+            # Abort the merge in case of conflicts
+            abort_failure_message = (
+                f"❌ *Merge Aborted*\n"
+                f"Conflict resolution failed during the merge of `{branch}` into `{primary_branch}`."
+            )
+            execute_git_command(chat_id, ["merge", "--abort"], telegram_bot, abort_failure_message)
             return
 
         # Step 7: Commit the merge
         commit_message = f"Merge branch '{branch}' into `{primary_branch}`\n\n{test_summary}"
-        subprocess.run(["git", "-C", repo_path, "commit", "-m", commit_message], check=True)
+        commit_failure_message = (
+            f"❌ *Auto-Merge Failed*\n"
+            f"Failed to commit the merge changes for `{branch}` into `{primary_branch}`."
+        )
+        execute_git_command(
+            chat_id,
+            ["commit", "-m", commit_message],
+            telegram_bot,
+            commit_failure_message
+        )
 
         # Step 8: Push the merged changes to the remote
-        push_result = subprocess.run(
-            ["git", "-C", repo_path, "push", "origin", primary_branch],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        push_failure_message = (
+            f"❌ *Push Failed*\n"
+            f"The merged changes for `{primary_branch}` could not be pushed to the remote."
         )
-        if push_result.returncode != 0:
-            telegram_bot.send_message(
-                chat_id,
-                f"❌ *Push Failed*\n"
-                f"The merged changes for `{primary_branch}` could not be pushed to the remote.\n"
-                f"Details:\n```\n{push_result.stderr.strip()}\n```"
-            )
-            return
+        execute_git_command(
+            chat_id,
+            ["push", "origin", primary_branch],
+            telegram_bot,
+            push_failure_message
+        )
 
         # Step 9: Notify user of successful merge
         telegram_bot.send_message(
@@ -279,12 +349,9 @@ def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_b
             f"Branch `{branch}` was successfully merged into `{primary_branch}`.\n"
             f"{test_summary}"
         )
-    except subprocess.CalledProcessError as e:
-        # Handle unexpected errors during merge and notify via Telegram
+    except RuntimeError as e:
+        # Notify user of unexpected errors
         telegram_bot.send_message(
             chat_id,
-            f"❌ *Auto-Merge Failed*\n"
-            f"Error during merging branch `{branch}` into `{primary_branch}`.\n"
-            f"Details: {str(e)}"
+            f"❌ *Auto-Merge Failed*\nDetails: {str(e)}"
         )
-        raise
