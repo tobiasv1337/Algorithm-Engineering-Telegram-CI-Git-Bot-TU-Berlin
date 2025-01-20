@@ -1,28 +1,13 @@
 import os
 import subprocess
 import json
-from utils.file_operations import load_chat_config
+from utils.file_operations import load_chat_config, get_chat_dir, get_repo_path
 
 # Centralized file for storing last commits
 LAST_COMMITS_FILE = "data/last_commits.json"
 
 # Ensure the data directory exists
 os.makedirs(os.path.dirname(LAST_COMMITS_FILE), exist_ok=True)
-
-
-# Path Helper Functions
-def get_chat_dir(chat_id):
-    """
-    Get the data directory for a given chat ID.
-    """
-    return os.path.join("data", str(chat_id))
-
-
-def get_repo_path(chat_id):
-    """
-    Get the repository path for a given chat ID.
-    """
-    return os.path.join(get_chat_dir(chat_id), "repo")
 
 
 # SSH Key Management

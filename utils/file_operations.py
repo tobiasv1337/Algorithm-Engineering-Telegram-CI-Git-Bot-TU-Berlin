@@ -2,7 +2,6 @@ import os
 import json
 import tempfile
 from zipfile import ZipFile
-from git_manager.git_operations import get_repo_path
 
 # Define the path for the central configuration file
 CONFIG_FILE_PATH = "data/config.json"
@@ -11,8 +10,22 @@ CONFIG_FILE_PATH = "data/config.json"
 os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
 
 
-# Centralized Configuration Management
+# Path Helper Functions
+def get_chat_dir(chat_id):
+    """
+    Get the data directory for a given chat ID.
+    """
+    return os.path.join("data", str(chat_id))
 
+
+def get_repo_path(chat_id):
+    """
+    Get the repository path for a given chat ID.
+    """
+    return os.path.join(get_chat_dir(chat_id), "repo")
+
+
+# Centralized Configuration Management
 def save_chat_config(chat_id, config_data):
     """
     Save configuration data for a specific chat ID.
