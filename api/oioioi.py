@@ -4,6 +4,7 @@ import time
 from bs4 import BeautifulSoup
 from config.config import Config
 from utils.results_utils import (parse_numeric_value, send_results_summary_to_telegram)
+from file_operations import load_chat_config
 
 
 class OioioiAPI:
@@ -12,6 +13,27 @@ class OioioiAPI:
         self.username = username
         self.password = password
         self.session = None
+    
+    def get_api_key_for_contest(chat_id, contest_id):
+        """
+        Retrieve the API key for a specific contest ID from the user's configuration.
+        Raises an exception if no API key is found for the contest.
+        """
+        config = load_chat_config(chat_id)
+        if not config:
+            raise ValueError(f"No configuration found for chat ID {chat_id}")
+
+        api_keys = config.get("OIOIOI_API_KEYS", {})
+        api_key = api_keys.get(contest_id)
+
+        if not api_key:
+            message = (
+                f"❌ No API key found for contest '{contest_id}' for chat {chat_id}.\n"
+                f"Please add the API key for this contest using the /update command."
+            )
+            raise KeyError(message)
+
+        return api_key
 
     def login(self):
         """
@@ -60,7 +82,7 @@ class OioioiAPI:
         The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
         """
         try:
-            api_key = Config.get_api_key_for_contest(contest_id)
+            api_key = self.get_api_key_for_contest(chat_id, contest_id)
         except KeyError:
             message = (
                 f"❌ *Submission Aborted*\n"
