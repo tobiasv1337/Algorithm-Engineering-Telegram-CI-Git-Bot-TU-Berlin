@@ -1,3 +1,6 @@
 .env
 last_commits.json
 submission_history.json
+
+.DS_Store
+.vscode
