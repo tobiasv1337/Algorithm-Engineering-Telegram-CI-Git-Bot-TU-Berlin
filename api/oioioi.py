@@ -129,6 +129,12 @@ class OioioiAPI:
             print(message)
             telegram_bot.send_message(message)
             return None
+    
+    def get_results_url(self, contest_id, submission_id):
+        """
+        Generate the results URL for a specific contest and submission ID.
+        """
+        return f"{self.base_url}/c/{contest_id}/s/{submission_id}/"
 
     def fetch_test_results(self, contest_id, submission_id):
         """
@@ -198,7 +204,7 @@ class OioioiAPI:
         while True:
             grouped_results = self.fetch_test_results(contest_id, submission_id)
             if grouped_results:
-                results_url = f"{self.base_url}/c/{contest_id}/s/{submission_id}/"
+                results_url = self.get_results_url(contest_id, submission_id)
                 send_results_summary_to_telegram(contest_id, grouped_results, results_url, telegram_bot)
                 break
             else:
