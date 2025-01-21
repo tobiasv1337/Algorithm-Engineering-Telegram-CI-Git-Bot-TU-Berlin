@@ -93,7 +93,7 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
     Process a branch for a specific user.
     """
     last_commit = load_last_commit(chat_id, branch)
-    current_commit = get_latest_commit(branch)
+    current_commit = get_latest_commit(chat_id, branch, telegram_bot)
 
     if not current_commit or current_commit == last_commit:
         return  # No new commit
@@ -135,7 +135,7 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
 
     # Check for new commits
     fetch_all_branches(chat_id, telegram_bot)
-    branches_to_check = get_tracked_branches()
+    branches_to_check = get_tracked_branches(chat_id, telegram_bot)
     for branch in branches_to_check:
         process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot)
 
