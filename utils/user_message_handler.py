@@ -22,7 +22,7 @@ async def add_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /add_chat_id \\<chat_id\\>")
+        await update.message.reply_text("Usage: /add_chat_id \<chat_id\>")
         return
 
     new_chat_id = context.args[0]
@@ -50,7 +50,7 @@ async def remove_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /remove_chat_id \\<chat_id\\>")
+        await update.message.reply_text("Usage: /remove_chat_id \<chat_id\>")
         return
 
     remove_chat_id = context.args[0]
@@ -132,13 +132,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   • OIOIOI credentials \\(username and password\\)\n"
         "2️⃣ Add additional chats \\(e\\.g\\. a group chat\\) by:\n"
         "   • Adding the bot to the chat\\.\n"
-        "   • Running /get_chat_id in the group to retrieve its ID\\.\n"
-        "   • Running /add_chat_id \\<chat_id\\> in your private chat with the bot to link the group\\.\n\n"
+        "   • Running /get\\_chat\\_id in the group to retrieve its ID\\.\n"
+        "   • Running /add\\_chat\\_id \<chat\\_id\> in your private chat with the bot to link the group\\.\n\n"
         "📚 *Help and Configuration:*\n"
         "• Use /help to view all available commands and instructions\\.\n"
         "• Use /config to update settings like the OIOIOI API key for a new contest\\.\n"
-        "• Use /get_chat_id to retrieve the current chat ID\\.\n"
-        "• Use /add_chat_id and /remove_chat_id to manage broadcast chats\\.\n\n"
+        "• Use /get\\_chat\\_id to retrieve the current chat ID\\.\n"
+        "• Use /add\\_chat\\_id and /remove\\_chat\\_id to manage broadcast chats\\.\n\n"
         "👨‍💻 *About the Developer:*\n"
         "• *Name:* Tobias Veselsky\n"
         "• *University:* Technische Universität Berlin\n"
@@ -176,16 +176,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   \\- Provide OIOIOI credentials \\(username and password\\)\\.\n"
         "   \\- The bot will automatically clone the repository and save the configuration\\.\n\n"
         "• /config \\- Update specific configuration settings for the bot:\n"
-        "   \\- Modify parameters like `repo_url`, `primary_branch`, or authentication details\\.\n"
+        "   \\- Modify parameters like `repo\\_url`, `primary\\_branch`, or authentication details\\.\n"
         "   \\- Update OIOIOI API keys for new contests\\.\n"
         "   \\- Use this command to adjust existing settings without redoing the setup\\.\n\n"
-        "• /get_chat_id \\- Retrieve the current chat's ID\\. Useful when adding the bot to a group or secondary chat\\.\n\n"
-        "• /add_chat_id \\<chat_id\\> \\- Add another chat to the bot's broadcast list:\n"
-        "   \\- Use `/get_chat_id` in the target chat to retrieve its ID\\.\n"
+        "• /get\\_chat\\_id \\- Retrieve the current chat's ID\\. Useful when adding the bot to a group or secondary chat\\.\n\n"
+        "• /add\\_chat\\_id \<chat\\_id\> \\- Add another chat to the bot's broadcast list:\n"
+        "   \\- Use `/get\\_chat\\_id` in the target chat to retrieve its ID\\.\n"
         "   \\- Run this command with the retrieved ID in your main bot chat to link the additional chat\\.\n\n"
-        "• /remove_chat_id \\<chat_id\\> \\- Remove a previously linked chat from the broadcast list:\n"
+        "• /remove\\_chat\\_id \<chat\\_id\> \\- Remove a previously linked chat from the broadcast list:\n"
         "   \\- Specify the chat ID to stop broadcasting messages to that chat\\.\n\n"
-        "• /list_chat_ids \\- List all linked chats that the bot broadcasts to:\n"
+        "• /list\\_chat\\_ids \\- List all linked chats that the bot broadcasts to:\n"
         "   \\- Displays the IDs of all configured chats for verification\\.\n\n"
         "• /delete \\- Delete the bot's current configuration and repository data:\n"
         "   \\- Deletes the repository files and all associated settings\\.\n"
@@ -194,7 +194,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   \\- Clears any ongoing setup or configuration steps\\.\n"
         "   \\- Does *not* stop active CI tasks or bot functionality\\.\n\n"
         "• /help \\- Display this help message with detailed information about the bot and its commands\\.\n\n"
-        "• /sample_config \\- Retrieve a sample `submission_config\\.json` file:\n"
+        "• /sample\\_config \\- Retrieve a sample `submission\\_config\\.json` file:\n"
         "   \\- Provides a template to include in your repository's primary branch\\.\n"
         "   \\- Explains the required fields and their purposes\\.\n\n"
         
@@ -204,21 +204,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   • Primary branch name \\(e\\.g\\. `main` or `master`\\)\n"
         "   • Git authentication method \\(e\\.g\\. SSH key\\)\n"
         "   • OIOIOI credentials \\(username and password\\)\n"
-        "2️⃣ Ensure your repository includes a `submission_config\\.json` in the root directory of the primary branch\\.\n"
+        "2️⃣ Ensure your repository includes a `submission\\_config\\.json` in the root directory of the primary branch\\.\n"
         "   • This file contains essential configurations for automated processing\\.\n"
-        "   • Use /sample_config to get a sample configuration file\\.\n"
+        "   • Use /sample\\_config to get a sample configuration file\\.\n"
         "3️⃣ Add additional chats \\(e\\.g\\., group chat\\):\n"
         "   • Add the bot to the group\\.\n"
-        "   • Run /get_chat_id in the group to get its ID\\.\n"
-        "   • Use /add_chat_id \\<chat_id\\> to link the group to the bot\\.\n\n"
+        "   • Run /get\\_chat\\_id in the group to get its ID\\.\n"
+        "   • Use /add\\_chat\\_id \<chat\\_id\> to link the group to the bot\\.\n\n"
         
         "💡 *Tips:*\n"
         "• Use /config to modify settings like OIOIOI API keys or repository details\\.\n"
-        "• Run /list_chat_ids to confirm all linked chats for message broadcasting\\.\n"
+        "• Run /list\\_chat\\_ids to confirm all linked chats for message broadcasting\\.\n"
         "• Use /abort if you want to reset the bot's configuration state during setup\\.\n\n"
         
         "📂 *Important Note:*\n"
-        "The newest commit on the primary branch and every commit to be processed by the bot *must* include a valid `submission_config\\.json` file in the root directory\\.\n\n"
+        "The newest commit on the primary branch and every commit to be processed by the bot *must* include a valid `submission\\_config\\.json` file in the root directory\\.\n\n"
         
         "For further assistance, contact the developer via email or GitHub\\.\n"
         "Happy coding\\! 🚀"
