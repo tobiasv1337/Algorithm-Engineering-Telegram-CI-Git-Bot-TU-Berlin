@@ -164,17 +164,25 @@ async def abort(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle the initial setup process (repo_url, auth_method, etc.).
+    Handle the initial setup process (repo_url, auth_method, primary_branch, etc.).
     """
     chat_id = update.effective_chat.id
     step = context.user_data.get("config_step")
 
     if step == "repo_url":
-        context.user_data["repo_url"] = update.message.text
+        context.user_data["repo_url"] = update.message.text.strip()
+        await update.message.reply_text("What is the primary branch of the repository? (e.g., master or main)")
+        context.user_data["config_step"] = "primary_branch"
+    elif step == "primary_branch":
+        primary_branch = update.message.text.strip()
+        if not primary_branch:
+            await update.message.reply_text("Invalid input. Please provide the name of the primary branch.")
+            return
+        context.user_data["primary_branch"] = primary_branch
         await update.message.reply_text("Choose authentication method: [none, https, ssh]")
         context.user_data["config_step"] = "auth_method"
     elif step == "auth_method":
-        auth_method = update.message.text.lower()
+        auth_method = update.message.text.lower().strip()
         if auth_method not in ["none", "https", "ssh"]:
             await update.message.reply_text("Invalid choice. Please choose: [none, https, ssh]")
             return
@@ -189,15 +197,15 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("Should I generate an SSH key for you? (yes/no)")
             context.user_data["config_step"] = "ssh_generate"
     elif step == "git_username":
-        context.user_data["git_username"] = update.message.text
+        context.user_data["git_username"] = update.message.text.strip()
         await update.message.reply_text("Please provide your Git password.")
         context.user_data["config_step"] = "git_password"
     elif step == "git_password":
-        context.user_data["git_password"] = update.message.text
+        context.user_data["git_password"] = update.message.text.strip()
         await update.message.reply_text("Please provide your OIOIOI username.")
         context.user_data["config_step"] = "oioioi_username"
     elif step == "ssh_generate":
-        generate_key = update.message.text.lower()
+        generate_key = update.message.text.lower().strip()
         if generate_key == "yes":
             ssh_key_path = generate_ssh_key(chat_id)
             with open(f"{ssh_key_path}.pub", "r") as key_file:
@@ -230,15 +238,13 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data["config_step"] = "oioioi_username"
         else:
             # If the key is invalid, ask the user to provide it again
-            await update.message.reply_text(
-                "Invalid SSH key format. Please provide a valid SSH public key."
-            )
+            await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
     elif step == "oioioi_username":
-        context.user_data["oioioi_username"] = update.message.text
+        context.user_data["oioioi_username"] = update.message.text.strip()
         await update.message.reply_text("Please provide your OIOIOI password.")
         context.user_data["config_step"] = "oioioi_password"
     elif step == "oioioi_password":
-        context.user_data["oioioi_password"] = update.message.text
+        context.user_data["oioioi_password"] = update.message.text.strip()
         await complete_setup(chat_id, context)
 
 
@@ -248,6 +254,7 @@ async def complete_setup(chat_id, context):
     """
     config_data = {
         "repo_url": context.user_data.get("repo_url"),
+        "primary_branch": context.user_data.get("primary_branch"),
         "auth_method": context.user_data.get("auth_method"),
         "git_username": context.user_data.get("git_username"),
         "git_password": context.user_data.get("git_password"),
