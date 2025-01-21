@@ -204,10 +204,35 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
                 public_key = key_file.read()
             await update.message.reply_text("SSH key generated successfully. Add the following public key to your repository:")
             await update.message.reply_text(public_key)
+            await update.message.reply_text("Please provide your OIOIOI username.")
+            context.user_data["config_step"] = "oioioi_username"
+        elif generate_key == "no":
+            await update.message.reply_text("Please upload your SSH public key. Send the key as plain text (not a file!). Avoid any extra characters or spaces.")
+            context.user_data["config_step"] = "ssh_provided"
         else:
-            await update.message.reply_text("Please upload your SSH public key.")
-        await update.message.reply_text("Please provide your OIOIOI username.")
-        context.user_data["config_step"] = "oioioi_username"
+            await update.message.reply_text("Invalid choice. Please choose: [yes, no]")
+    elif step == "ssh_provided":
+        ssh_key = update.message.text.strip()
+
+        # Validate the SSH key (basic validation)
+        if ssh_key.startswith("ssh-") and " " in ssh_key:
+            chat_dir = get_chat_dir(chat_id)
+            ssh_key_path = os.path.join(chat_dir, "id_rsa.pub")
+
+            if not os.path.exists(chat_dir):
+                os.makedirs(chat_dir)
+
+            with open(ssh_key_path, "w") as key_file:
+                key_file.write(ssh_key)
+            await update.message.reply_text("SSH key saved successfully!")
+
+            await update.message.reply_text("Please provide your OIOIOI username.")
+            context.user_data["config_step"] = "oioioi_username"
+        else:
+            # If the key is invalid, ask the user to provide it again
+            await update.message.reply_text(
+                "Invalid SSH key format. Please provide a valid SSH public key."
+            )
     elif step == "oioioi_username":
         context.user_data["oioioi_username"] = update.message.text
         await update.message.reply_text("Please provide your OIOIOI password.")
