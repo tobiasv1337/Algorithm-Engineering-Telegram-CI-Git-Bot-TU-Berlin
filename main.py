@@ -143,44 +143,66 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
     process_pending_submissions(chat_id, oioioi_api, telegram_bot)
 
 
-async def main():
+async def ci_task_loop():
+    """
+    CI Task Loop: Periodically processes CI-related tasks for all chat IDs.
+    """
     telegram_bot = TelegramBot(Config.TELEGRAM_BOT_TOKEN)
-    telegram_app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
-    initialize_message_handlers(telegram_app)
-    await telegram_app.initialize()
 
-    last_ci_timestamp = datetime.now()
-
-    # Start Telegram polling initially
-    await telegram_app.start()
+    print("▶️ CI Task Loop started.")
 
     while not ShutdownSignal.flag:
-        # Check if it's time for CI tasks
-        if datetime.now() - last_ci_timestamp > timedelta(seconds=Config.CHECK_INTERVAL):
-            print("🔧 Pausing Telegram polling for CI tasks.")
-            await telegram_app.stop()  # Gracefully stop polling
+        # Perform CI tasks
+        all_chat_configs = get_all_chat_configs()
+        chat_ids = all_chat_configs.keys()
 
-            # Perform CI tasks
-            all_chat_configs = get_all_chat_configs()
-            chat_ids = all_chat_configs.keys()
+        for chat_id in chat_ids:
+            try:
+                oioioi_api = OioioiAPI(chat_id)
+                process_chat_id(chat_id, oioioi_api, telegram_bot)
+            except Exception as e:
+                telegram_bot.send_message(
+                    chat_id, f"❌ *Error Processing User*\n{str(e)}"
+                )
 
-            for chat_id in chat_ids:
-                try:
-                    oioioi_api = OioioiAPI(chat_id)
-                    process_chat_id(chat_id, oioioi_api, telegram_bot)
-                except Exception as e:
-                    telegram_bot.send_message(
-                        chat_id, f"❌ *Error Processing User*\n{str(e)}"
-                    )
+        await asyncio.sleep(Config.CHECK_INTERVAL)
+    
+    print("⏹️ CI Task Loop stopped.")
 
-            last_ci_timestamp = datetime.now()
 
-            print("▶️ Resuming Telegram polling.")
-            await telegram_app.start()  # Resume polling after tasks
+async def telegram_task():
+    """
+    Telegram Task: Handles incoming bot commands and updates.
+    """
+    application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
 
-        time.sleep(1)
+    initialize_message_handlers(application)
+    #await application.updater.initialize()
 
-    print("Shutting down bot and CI tasks.")
+    await application.initialize()
+    await application.updater.start_polling()
+    await application.start()
+    print("▶️ Telegram bot started.")
+
+    # Keep running until we need to shut down
+    while not ShutdownSignal.flag:
+        await asyncio.sleep(1)
+
+    # Stop the bot
+    await application.stop()
+    print("⏹️ Telegram bot stopped.")
+
+
+async def main():
+    """
+    Main function to run Telegram bot and CI task loop concurrently.
+    """
+
+    bot_task = asyncio.create_task(telegram_task())
+    ci_task = asyncio.create_task(ci_task_loop())
+
+    # Run both concurrently
+    await asyncio.gather(bot_task, ci_task)
 
 
 if __name__ == "__main__":
@@ -188,5 +210,5 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_shutdown_signal)  # Ctrl+C
     signal.signal(signal.SIGTERM, handle_shutdown_signal)  # Termination signal
 
-    print("Starting script. Press Ctrl+C to stop.")
+    print("Starting Telegram-Bot and CI tasks. Press Ctrl+C to stop.")
     asyncio.run(main())
