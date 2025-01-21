@@ -9,7 +9,7 @@ from utils.file_operations import create_zip_files, load_chat_config, save_chat_
 from utils.system import handle_shutdown_signal, ShutdownSignal
 from handlers.compilation_manager import check_for_compiler_errors
 from datetime import datetime, timedelta
-from utils.user_message_handler import initialize_message_handlers
+from utils.user_message_handler import initialize_message_handlers, register_commands
 from telegram.ext import Application
 
 
@@ -174,6 +174,7 @@ async def telegram_task():
     application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
 
     initialize_message_handlers(application)
+    await register_commands(application)
 
     await application.initialize()
     await application.updater.start_polling()

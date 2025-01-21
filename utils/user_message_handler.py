@@ -1,10 +1,30 @@
 import os
 import shutil
 import json
-from telegram import Update
-from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, BotCommand
+from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, Application
 from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir
 from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
+
+
+async def register_commands(application: Application):
+    """
+    Register bot commands to show them in the list when the user types '/'.
+    """
+    commands = [
+        BotCommand("start", "Learn about the bot, its purpose, and how to begin"),
+        BotCommand("setup", "Configure the bot for your repository"),
+        BotCommand("config", "Modify settings like repo URL or API keys"),
+        BotCommand("get_chat_id", "Get the current chat's ID"),
+        BotCommand("add_chat_id", "Link another chat to receive bot messages"),
+        BotCommand("remove_chat_id", "Unlink a chat from receiving bot messages"),
+        BotCommand("list_chat_ids", "View all linked chats for broadcasting"),
+        BotCommand("delete", "Remove all configurations and repository data"),
+        BotCommand("abort", "Cancel the current setup or configuration process"),
+        BotCommand("help", "Get detailed information about the bot and its commands"),
+        BotCommand("sample_config", "Download a sample submission_config.json template"),
+    ]
+    await application.bot.set_my_commands(commands)
 
 
 async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
