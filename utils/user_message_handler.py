@@ -66,6 +66,7 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Show available options for updating
     options = [
         "repo_url",
+        "primary_branch",
         "auth_method",
         "git_username",
         "git_password",
