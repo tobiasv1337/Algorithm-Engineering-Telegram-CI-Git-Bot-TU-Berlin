@@ -85,7 +85,8 @@ class OioioiAPI:
             message = (
                 f"❌ *Submission Aborted*\n"
                 f"No API key found for contest '{contest_id}'.\n"
-                f"Please add the API key to continue."
+                f"Please add the API key to continue.\n"
+                f"Use `/update` to add the API key."
             )
             print(message)
             telegram_bot.send_message(chat_id, message)
