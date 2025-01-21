@@ -6,7 +6,7 @@ from utils.file_operations import create_zip_files
 from handlers.base_handler import CompilationError
 
 
-def check_for_compiler_errors(config, telegram_bot):
+def check_for_compiler_errors(chat_id, config, telegram_bot):
     """
     Run a compilation check for each project specified in the configuration.
     Uses language-specific handlers to process each project in a temporary directory. Handles errors and warnings based on configuration flags.
@@ -20,7 +20,7 @@ def check_for_compiler_errors(config, telegram_bot):
             f"🛠 Supported languages: {', '.join(LANGUAGE_HANDLERS.keys())}"
         )
         print(message)
-        telegram_bot.send_message(message)
+        telegram_bot.send_message(chat_id, message)
         return False
 
     if language not in LANGUAGE_HANDLERS:
@@ -30,7 +30,7 @@ def check_for_compiler_errors(config, telegram_bot):
             "💡 If you need support for this language, please contact the bot administrator."
         )
         print(message)
-        telegram_bot.send_message(message)
+        telegram_bot.send_message(chat_id, message)
         return False
 
     handler = LANGUAGE_HANDLERS[language]

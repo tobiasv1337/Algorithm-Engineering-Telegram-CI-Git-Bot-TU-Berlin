@@ -18,10 +18,10 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
     Process a new commit: validate, compile, submit, and handle results.
     """
     # Reset to the specific commit
-    reset_to_commit(chat_id, branch, current_commit)
+    reset_to_commit(chat_id, branch, current_commit, telegram_bot)
 
     # Check for compiler errors
-    if not check_for_compiler_errors(config):
+    if not check_for_compiler_errors(chat_id, config, telegram_bot):
         message = (
             f"❌ *Compilation Failed*\n"
             f"• *Branch*: `{branch}`\n"
@@ -31,7 +31,6 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
             f"Please review the compilation logs for more details."
         )
         print(message)
-        telegram_bot.send_message(chat_id, message)
         telegram_bot.send_message(chat_id, message)
         return False
 
@@ -100,7 +99,7 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
 
     save_last_commit(chat_id, branch, current_commit)
 
-    commit_message = get_commit_message(current_commit)
+    commit_message = get_commit_message(chat_id, current_commit, telegram_bot)
     telegram_bot.send_message(
         chat_id,
         f"🚨 *New Commit Detected*\n"
@@ -110,7 +109,7 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
     )
 
     # Load configuration for the commit
-    config = load_config_from_commit(current_commit)
+    config = load_config_from_commit(chat_id, current_commit)
     if not config or not config.get("AUTOCOMMIT", False):
         telegram_bot.send_message(
             chat_id,
