@@ -66,7 +66,7 @@ def execute_git_command(chat_id, command, telegram_bot=None, failure_message=Non
     """
     repo_path = get_repo_path(chat_id)
     config = load_chat_config(chat_id)
-    access_type = config.get("access_type", "https")  # Default to HTTPS
+    access_type = config.get("auth_method")
 
     # Prepare environment for SSH if needed
     env = os.environ.copy()
@@ -90,13 +90,13 @@ def execute_git_command(chat_id, command, telegram_bot=None, failure_message=Non
 
 
 # Repository Operations
-def clone_repository(chat_id, repo_url, telegram_bot):
+def clone_repository(chat_id, repo_url, telegram_bot=None):
     """
     Clone a repository using the appropriate authentication method (HTTPS or SSH).
     """
     repo_path = get_repo_path(chat_id)
     config = load_chat_config(chat_id)
-    access_type = config.get("access_type")
+    access_type = config.get("auth_method")
 
     if not os.path.exists(repo_path):
         os.makedirs(repo_path)
@@ -131,10 +131,11 @@ def clone_repository(chat_id, repo_url, telegram_bot):
     except subprocess.CalledProcessError:
         # Mask credentials in the error message
         safe_repo_url = mask_url_credentials(repo_url)
-        telegram_bot.send_message(
-            chat_id,
-            f"❌ *Git Error: Clone Failed*\nRepository: `{safe_repo_url}`\nDetails: Git command failed."
-        )
+        if telegram_bot:
+            telegram_bot.send_message(
+                chat_id,
+                f"❌ *Git Error: Clone Failed*\nRepository: `{safe_repo_url}`\nDetails: Git command failed."
+            )
         raise RuntimeError(f"Failed to clone repository: {safe_repo_url}")
 
     except Exception as e:
