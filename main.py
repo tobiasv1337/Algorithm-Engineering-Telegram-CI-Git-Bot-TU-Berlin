@@ -177,7 +177,6 @@ async def telegram_task():
     application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
 
     initialize_message_handlers(application)
-    #await application.updater.initialize()
 
     await application.initialize()
     await application.updater.start_polling()
