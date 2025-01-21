@@ -35,12 +35,10 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
         return False
 
     # Create ZIP files for submission
-    zip_files, temp_dir = create_zip_files(config)
+    zip_files, temp_dir = create_zip_files(config, chat_id)
     try:
         # Submit the solution
-        submission_id = oioioi_api.submit_solution(
-            config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot
-        )
+        submission_id = oioioi_api.submit_solution(chat_id, config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot)
         if submission_id:
             # Append to pending submissions and save
             user_config = load_chat_config(chat_id)
@@ -121,7 +119,7 @@ def process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot):
         return
 
     # Process the commit
-    process_commit(chat_id, branch, current_commit, user_config, oioioi_api, telegram_bot)
+    process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram_bot)
 
 
 def process_chat_id(chat_id, oioioi_api, telegram_bot):

@@ -74,7 +74,7 @@ class OioioiAPI:
         if response.status_code != 200 or "Log out" not in response.text:
             raise Exception(f"Login failed. Status code: {response.status_code}")
 
-    def submit_solution(self, contest_id, problem_short_name, zip_files, branch, telegram_bot):
+    def submit_solution(self, chat_id, contest_id, problem_short_name, zip_files, branch, telegram_bot):
         """
         Submit multiple ZIP files via the OIOIOI API for the specified contest.
         The first ZIP file is submitted as "file", and subsequent ones as "file2", "file3", etc.
@@ -88,7 +88,7 @@ class OioioiAPI:
                 f"Please add the API key to continue."
             )
             print(message)
-            telegram_bot.send_message(message)
+            telegram_bot.send_message(chat_id, message)
             return None
 
         url = f"{self.base_url}/api/c/{contest_id}/submit/{problem_short_name}"
@@ -117,17 +117,17 @@ class OioioiAPI:
                     f"• Waiting for results..."
                 )
                 print(message)
-                telegram_bot.send_message(message)
+                telegram_bot.send_message(chat_id, message)
                 return submission_id
             else:
                 message = f"❌ *Submission Failed*\nStatus Code: {response.status_code}\nResponse: {response.text}"
                 print(message)
-                telegram_bot.send_message(message)
+                telegram_bot.send_message(chat_id, message)
                 return None
         except Exception as e:
             message = f"❌ *Submission Failed*\nError: {str(e)}"
             print(message)
-            telegram_bot.send_message(message)
+            telegram_bot.send_message(chat_id, message)
             return None
 
     def get_results_url(self, contest_id, submission_id):

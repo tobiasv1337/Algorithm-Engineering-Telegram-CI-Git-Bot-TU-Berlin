@@ -35,7 +35,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
 
     handler = LANGUAGE_HANDLERS[language]
 
-    zip_files, temp_dir = create_zip_files(config)
+    zip_files, temp_dir = create_zip_files(config, chat_id)
     all_projects_meet_criteria = True
 
     for zip_file in zip_files:
@@ -53,7 +53,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                             f"{result.warnings}"
                         )
                         print(warning_message)
-                        telegram_bot.send_message(warning_message)
+                        telegram_bot.send_message(chat_id, warning_message)
 
                         if not config.get("ALLOW_WARNINGS", False):
                             all_projects_meet_criteria = False
@@ -66,7 +66,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                         f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{str(e)}"
                     )
                     print(error_message)
-                    telegram_bot.send_message(error_message)
+                    telegram_bot.send_message(chat_id, error_message)
 
                     if not config.get("ALLOW_ERRORS", False):
                         all_projects_meet_criteria = False
@@ -79,7 +79,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                     f"Error: {str(e)}"
                 )
                 print(unexpected_error_message)
-                telegram_bot.send_message(unexpected_error_message)
+                telegram_bot.send_message(chat_id, unexpected_error_message)
                 all_projects_meet_criteria = False
                 break
 
