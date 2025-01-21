@@ -202,7 +202,8 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
             ssh_key_path = generate_ssh_key(chat_id)
             with open(f"{ssh_key_path}.pub", "r") as key_file:
                 public_key = key_file.read()
-            await update.message.reply_text(f"SSH key generated. Add this public key to your repository:\n\n`{public_key}`")
+            await update.message.reply_text("SSH key generated successfully. Add the following public key to your repository:")
+            await update.message.reply_text(public_key)
         else:
             await update.message.reply_text("Please upload your SSH public key.")
         await update.message.reply_text("Please provide your OIOIOI username.")
@@ -213,10 +214,10 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["config_step"] = "oioioi_password"
     elif step == "oioioi_password":
         context.user_data["oioioi_password"] = update.message.text
-        complete_setup(chat_id, context)
+        await complete_setup(chat_id, context)
 
 
-def complete_setup(chat_id, context):
+async def complete_setup(chat_id, context):
     """
     Finalize repository setup and save the configuration.
     """
@@ -235,10 +236,10 @@ def complete_setup(chat_id, context):
     try:
         clone_repository(chat_id, config_data["repo_url"])
     except Exception as e:
-        context.bot.send_message(chat_id, f"❌ Failed to clone repository: {e}")
+        await context.bot.send_message(chat_id, f"❌ Failed to clone repository: {e}")
         return
 
-    context.bot.send_message(chat_id, "✅ Repository and OIOIOI setup are complete and ready for use.")
+    await context.bot.send_message(chat_id, "✅ Repository and OIOIOI setup are complete and ready for use.")
 
 
 def delete_user_data(chat_id):
