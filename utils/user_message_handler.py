@@ -6,6 +6,90 @@ from git_manager.git_operations import generate_ssh_key, clone_repository, get_c
 from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
 
 
+async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Respond with the current chat's ID.
+    """
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(f"The current chat ID is: `{chat_id}`")
+
+
+async def add_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Add a chat ID to the broadcast list.
+    """
+    chat_id = update.effective_chat.id
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /add_chat_id <chat_id>")
+        return
+
+    new_chat_id = context.args[0]
+
+    config = load_chat_config(chat_id)
+    if not config:
+        await update.message.reply_text("No configuration found for this chat.\n If the bot only broadcasts to this chat via /add_chat_id, configuration is only allowed via the admin's initial chat.")
+        return
+
+    broadcast_list = config.get("broadcast_chat_ids", [])
+    if new_chat_id in broadcast_list:
+        await update.message.reply_text(f"Chat ID `{new_chat_id}` is already in the broadcast list.")
+        return
+
+    broadcast_list.append(new_chat_id)
+    save_chat_config(chat_id, {"broadcast_chat_ids": broadcast_list})
+
+    await update.message.reply_text(f"Chat ID `{new_chat_id}` has been added to the broadcast list.")
+
+
+async def remove_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Remove a chat ID from the broadcast list.
+    """
+    chat_id = update.effective_chat.id
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /remove_chat_id <chat_id>")
+        return
+
+    remove_chat_id = context.args[0]
+
+    config = load_chat_config(chat_id)
+    if not config:
+        await update.message.reply_text("No configuration found for this chat.\n If the bot only broadcasts to this chat via /add_chat_id, configuration is only allowed via the admin's initial chat.")
+        return
+
+    broadcast_list = config.get("broadcast_chat_ids", [])
+    if remove_chat_id not in broadcast_list:
+        await update.message.reply_text(f"Chat ID `{remove_chat_id}` is not in the broadcast list.")
+        return
+
+    broadcast_list.remove(remove_chat_id)
+    save_chat_config(chat_id, {"broadcast_chat_ids": broadcast_list})
+
+    await update.message.reply_text(f"Chat ID `{remove_chat_id}` has been removed from the broadcast list.")
+
+
+async def list_chat_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    List all chat IDs in the broadcast list.
+    """
+    chat_id = update.effective_chat.id
+
+    config = load_chat_config(chat_id)
+    if not config:
+        await update.message.reply_text("No configuration found for this chat.\n If the bot only broadcasts to this chat via /add_chat_id, configuration is only allowed via the admin's initial chat.")
+        return
+
+    broadcast_list = config.get("broadcast_chat_ids", [])
+    if not broadcast_list:
+        await update.message.reply_text("The broadcast list is currently empty.")
+        return
+
+    formatted_list = "\n".join(broadcast_list)
+    await update.message.reply_text(f"Current broadcast list:\n{formatted_list}")
+
+
 def reset_user_data(context):
     """
     Reset all temporary keys in context.user_data.
@@ -293,4 +377,8 @@ def initialize_message_handlers(telegram_bot):
     telegram_bot.add_handler(CommandHandler("update", update))
     telegram_bot.add_handler(CommandHandler("delete", delete))
     telegram_bot.add_handler(CommandHandler("abort", abort))
+    telegram_bot.add_handler(CommandHandler("get_chat_id", get_chat_id))
+    telegram_bot.add_handler(CommandHandler("add_chat_id", add_chat_id))
+    telegram_bot.add_handler(CommandHandler("remove_chat_id", remove_chat_id))
+    telegram_bot.add_handler(CommandHandler("list_chat_ids", list_chat_ids))
     telegram_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
