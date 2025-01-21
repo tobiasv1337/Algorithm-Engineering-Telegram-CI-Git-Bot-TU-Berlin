@@ -224,7 +224,7 @@ def get_tracked_branches(chat_id, telegram_bot):
     Sends appropriate error messages for missing configurations or fallback usage.
     """
     global_config = load_chat_config(chat_id)
-    primary_branch = global_config.get("PRIMARY_BRANCH", "main")
+    primary_branch = global_config.get("primary_branch", "master")
 
     primary_branch_commit = get_latest_commit(chat_id, primary_branch, telegram_bot)
     if primary_branch_commit:
@@ -262,12 +262,12 @@ def load_config_from_commit(chat_id, commit_hash, config_filename="submission_co
 
 def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_bot):
     """
-    Automatically merge the specified branch into PRIMARY_BRANCH after successful testing.
+    Automatically merge the specified branch into primary_branch after successful testing.
     Includes a short summary of test results in the commit message.
     Only performs the merge if there are no conflicts.
     """
     global_config = load_chat_config(chat_id)
-    primary_branch = global_config.get("PRIMARY_BRANCH", "main")
+    primary_branch = global_config.get("primary_branch", "main")
 
     try:
         # Step 1: Calculate the total number of tests and passed tests
