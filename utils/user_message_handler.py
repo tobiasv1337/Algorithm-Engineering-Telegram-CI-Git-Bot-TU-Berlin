@@ -108,7 +108,50 @@ def reset_user_data(context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle the /start command and initialize repository setup.
+    Greet the user and provide detailed information about the bot.
+    """
+    user = update.effective_user.first_name
+    message = (
+        f"👋 *Welcome, {user}!*\n\n"
+        "🤖 This bot is designed to assist with the *Algorithm Engineering* module at TU Berlin.\n"
+        "It continuously monitors your repository, automatically compiles and tests your code, and submits it to the OIOIOI test platform.\n"
+        "Successful submissions are automatically merged into the specified branch.\n\n"
+        "📌 *Key Features:*\n"
+        "• Monitors specified branches for new commits.\n"
+        "• Automatically compiles code and checks for errors.\n"
+        "• Submits code to the OIOIOI platform for testing.\n"
+        "• Notifies you of the test results and submission status.\n"
+        "• Automatically merges passing commits into the target branch.\n\n"
+        "📋 *How to Set Up:*\n"
+        "1️⃣ Run `/setup` to configure the bot for your repository.\n"
+        "   During setup, you'll provide:\n"
+        "   • Repository URL\n"
+        "   • Primary branch name (e.g., `main` or `master`)\n"
+        "   • Git authentication method (e.g., SSH key)\n"
+        "   • OIOIOI credentials (username and password)\n"
+        "2️⃣ Add additional chats (e.g., a group chat) by:\n"
+        "   • Adding the bot to the chat.\n"
+        "   • Running `/get_chat_id` in the group to retrieve its ID.\n"
+        "   • Running `/add_chat_id <chat_id>` in your private chat with the bot to link the group.\n\n"
+        "📚 *Help and Configuration:*\n"
+        "• Use `/help` to view all available commands and instructions.\n"
+        "• Use `/config` to update settings like the OIOIOI API key for a new contest.\n"
+        "• Use `/get_chat_id` to retrieve the current chat ID.\n"
+        "• Use `/add_chat_id` and `/remove_chat_id` to manage broadcast chats.\n\n"
+        "👨‍💻 *About the Developer:*\n"
+        "• *Name:* Tobias Veselsky\n"
+        "• *University:* Technische Universität Berlin\n"
+        "• *Email:* [veselsky@tu-berlin.de](mailto:veselsky@tu-berlin.de)\n"
+        "• *GitHub:* [tobiasv1337](https://github.com/tobiasv1337)\n\n"
+        "🚀 *Get Started:*\n"
+        "Run `/setup` to configure your repository and start using the bot."
+    )
+    await update.message.reply_text(message, parse_mode="MarkdownV2")
+
+
+async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Begin the setup process to configure the bot for a repository.
     """
     chat_id = update.effective_chat.id
     user = update.effective_user.first_name
@@ -116,11 +159,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check if configuration exists
     config = load_chat_config(chat_id)
     if config and config.get("setup_complete"):
-        await update.message.reply_text(f"Welcome back, {user}! Your repository is already set up.")
+        await update.message.reply_text(f"Welcome back, {user}! Your repository is already set up. If you want to change parameters, use `/config`.")
         return
 
     # Start repository configuration
-    await update.message.reply_text(f"Hello, {user}! Let's set up your repository.")
+    await update.message.reply_text(
+        "Hello, {user}! "
+        "🔧 Let's set up your repository for monitoring and auto-submissions.\n"
+        "Please provide the following details step-by-step."
+    )
     await update.message.reply_text("What is the repository URL?")
     context.user_data["state"] = "initializing"
     context.user_data["config_step"] = "repo_url"
@@ -132,22 +179,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     state = context.user_data.get("state")
 
-    if state == "updating":
+    if state == "configuring":
         await handle_update_step(update, context)
     elif state == "initializing":
         await handle_initializing(update, context)
     elif state == "deleting":
         await delete(update, context)
     else:
-        await update.message.reply_text("I'm not sure what you're asking. Try using /start or /update.")
+        await update.message.reply_text("I'm not sure what you're asking. Try using /help for a list of available commands.")
 
 
-async def update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle the /update command to let users update their configuration values.
+    Handle the /config command to let users update their configuration values.
     """
 
-    # Show available options for updating
+    # Show available options for configuring
     options = [
         "repo_url",
         "primary_branch",
@@ -164,7 +211,7 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Send the name of the value (e.g., `repo_url`)."
     )
 
-    context.user_data["state"] = "updating"
+    context.user_data["state"] = "configuring"
     context.user_data["update_step"] = "choose_key"
 
 
@@ -244,7 +291,7 @@ async def abort(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Handle the /abort command to reset all states and abort any ongoing process.
     """
     reset_user_data(context)
-    await update.message.reply_text("❌ All ongoing operations have been aborted. You can start again with /start or /update.")
+    await update.message.reply_text("❌ All ongoing operations have been aborted. You can start a new operation.")
 
 
 async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -374,7 +421,8 @@ def initialize_message_handlers(telegram_bot):
     Register command and message handlers for the Telegram bot.
     """
     telegram_bot.add_handler(CommandHandler("start", start))
-    telegram_bot.add_handler(CommandHandler("update", update))
+    telegram_bot.add_handler(CommandHandler("setup", setup))
+    telegram_bot.add_handler(CommandHandler("config", config))
     telegram_bot.add_handler(CommandHandler("delete", delete))
     telegram_bot.add_handler(CommandHandler("abort", abort))
     telegram_bot.add_handler(CommandHandler("get_chat_id", get_chat_id))
