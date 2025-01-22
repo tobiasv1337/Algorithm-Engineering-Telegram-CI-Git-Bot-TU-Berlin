@@ -53,8 +53,8 @@ async def add_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     chat_id = update.effective_chat.id
 
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /add_chat_id \<chat_id\>")
+    if not context.args or not context.args[0].lstrip("-").isdigit():
+        await update.message.reply_text("Usage: /add_chat_id <chat_id>")
         return
 
     new_chat_id = context.args[0]
@@ -82,7 +82,7 @@ async def remove_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Usage: /remove_chat_id \<chat_id\>")
+        await update.message.reply_text("Usage: /remove_chat_id <chat_id>")
         return
 
     remove_chat_id = context.args[0]
