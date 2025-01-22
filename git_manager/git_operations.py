@@ -59,6 +59,23 @@ def save_last_commit(chat_id, branch, commit_hash):
         json.dump(last_commits, file, indent=4)
 
 
+def delete_last_commit_data(chat_id):
+    """
+    Delete the stored last commit data for a specific chat ID.
+    """
+    if os.path.exists(LAST_COMMITS_FILE):
+        with open(LAST_COMMITS_FILE, "r") as file:
+            last_commits = json.load(file)
+
+        # Remove the chat ID's data if it exists
+        if str(chat_id) in last_commits:
+            del last_commits[str(chat_id)]
+
+            # Save the updated data back to the file
+            with open(LAST_COMMITS_FILE, "w") as file:
+                json.dump(last_commits, file, indent=4)
+
+
 # Helper Function for Git Commands
 def execute_git_command(chat_id, command, telegram_bot=None, failure_message=None):
     """

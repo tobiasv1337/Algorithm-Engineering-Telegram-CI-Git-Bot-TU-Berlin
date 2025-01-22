@@ -3,7 +3,7 @@ import shutil
 import json
 from telegram import Update, BotCommand
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, Application
-from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir
+from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir, delete_last_commit_data
 from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
 
 # White-listed configuration options for /config command
@@ -579,6 +579,7 @@ def delete_user_data(chat_id):
     Delete user-specific configuration and repository files.
     """
     delete_chat_config(chat_id)
+    delete_last_commit_data(chat_id)
     chat_dir = get_chat_dir(chat_id)
     if os.path.exists(chat_dir):
         shutil.rmtree(chat_dir)
