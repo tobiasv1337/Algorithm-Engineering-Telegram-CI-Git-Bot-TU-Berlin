@@ -155,7 +155,7 @@ def reset_user_data(context):
     keys_to_remove = [
         "state",
         "config_step",
-        "update_step",
+        "config_step",
         "update_key",
         "update_contest_id",
     ]
@@ -377,7 +377,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
 
     if state == "configuring":
-        await handle_update_step(update, context)
+        await handle_config_step(update, context)
     elif state == "initializing":
         await handle_initializing(update, context)
     elif state == "deleting":
@@ -402,15 +402,15 @@ async def config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     context.user_data["state"] = "configuring"
-    context.user_data["update_step"] = "choose_key"
+    context.user_data["config_step"] = "choose_key"
 
 
-async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle user input during the update process.
+    Handle user input during the config process.
     """
     chat_id = update.effective_chat.id
-    step = context.user_data.get("update_step")
+    step = context.user_data.get("config_step")
 
     if step == "choose_key":
         key = update.message.text.strip()
@@ -419,11 +419,13 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if key == "OIOIOI_API_KEYS":
             # Handle nested configuration for API keys
             await update.message.reply_text("Enter the contest ID you want to update:")
-            context.user_data["update_step"] = "choose_contest"
+            context.user_data["config_step"] = "choose_contest"
         elif key in config_whitelist:
-            # Proceed with general configuration updates
-            await update.message.reply_text(f"Enter the new value for `{key}`:")
-            context.user_data["update_step"] = "update_value"
+            if key == "auth_method":
+                await update.message.reply_text("Choose a new authentication method: [none, https, ssh]")
+            else:
+                await update.message.reply_text(f"Enter the new value for `{key}`:")
+            context.user_data["config_step"] = "update_value"
         else:
             await update.message.reply_text(
                 f"Invalid configuration option. Please choose from the following:\n\n"
@@ -435,7 +437,7 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         contest_id = update.message.text.strip()
         context.user_data["update_contest_id"] = contest_id
         await update.message.reply_text(f"Enter the new API key for contest `{contest_id}`:")
-        context.user_data["update_step"] = "update_value"
+        context.user_data["config_step"] = "update_value"
 
     elif step == "update_value":
         key = context.user_data.get("update_key")
@@ -448,18 +450,62 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
             api_keys[contest_id] = new_value
             save_chat_config(chat_id, {"OIOIOI_API_KEYS": api_keys})
             await update.message.reply_text(f"API key for contest `{contest_id}` updated successfully!")
+        elif key == "auth_method":
+            save_chat_config(chat_id, {key: new_value})
+            if new_value == "ssh":
+                await update.message.reply_text("Should I generate a new SSH key for you? (yes/no)")
+                context.user_data["config_step"] = "ssh_generate"
+            elif new_value == "https":
+                await update.message.reply_text("Please provide your Git username.")
+                context.user_data["config_step"] = "git_username"
+            elif new_value == "none":
+                await update.message.reply_text("Authentication method updated to 'none'.")
+                reclone_repository(update, chat_id, key)
+            else:
+                await update.message.reply_text("Invalid authentication method. Please choose: [none, https, ssh]")
         else:
+            # Update a regular configuration key
             save_chat_config(chat_id, {key: new_value})
 
-            if key in ["repo_url", "primary_branch", "auth_method"]:
-                await reclone_repository(update, chat_id, key, new_value)
+            if key in ["repo_url", "primary_branch"]:
+                await reclone_repository(update, chat_id, key)
             else:
                 await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
 
         reset_user_data(context)  # Reset state after update
 
+    elif step == "ssh_generate":
+        generate_key = update.message.text.strip().lower()
+        if generate_key == "yes":
+            ssh_key_path = generate_ssh_key(chat_id)
+            with open(f"{ssh_key_path}.pub", "r") as key_file:
+                public_key = key_file.read()
+            await update.message.reply_text(
+                "SSH key generated successfully. Add the following public key to your repository:"
+            )
+            await update.message.reply_text(public_key)
+            reclone_repository(update, chat_id, key)
+            reset_user_data(context)
+        elif generate_key == "no":
+            await update.message.reply_text(
+                "Please upload your SSH public key. Send the key as plain text (not a file!)."
+            )
+            context.user_data["config_step"] = "ssh_provided"
+        else:
+            await update.message.reply_text("Invalid choice. Please respond with 'yes' or 'no'.")
 
-async def reclone_repository(update: Update, chat_id, key, new_value):
+    elif step == "ssh_provided":
+        ssh_key = update.message.text.strip()
+
+        if save_ssh_key(chat_id, ssh_key):
+            await update.message.reply_text("SSH key saved successfully!")
+            reclone_repository(update, chat_id, key)
+            reset_user_data(context)
+        else:
+            await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
+
+
+async def reclone_repository(update: Update, chat_id, key):
     """
     Re-clone the repository after updating the configuration.
     """
@@ -585,22 +631,11 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif step == "ssh_provided":
         ssh_key = update.message.text.strip()
 
-        # Validate the SSH key (basic validation)
-        if ssh_key.startswith("ssh-") and " " in ssh_key:
-            chat_dir = get_chat_dir(chat_id)
-            ssh_key_path = os.path.join(chat_dir, "id_rsa.pub")
-
-            if not os.path.exists(chat_dir):
-                os.makedirs(chat_dir)
-
-            with open(ssh_key_path, "w") as key_file:
-                key_file.write(ssh_key)
+        if save_ssh_key(chat_id, ssh_key):
             await update.message.reply_text("SSH key saved successfully!")
-
             await update.message.reply_text("Please provide your OIOIOI username.")
             context.user_data["config_step"] = "oioioi_username"
         else:
-            # If the key is invalid, ask the user to provide it again
             await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
     elif step == "oioioi_username":
         context.user_data["oioioi_username"] = update.message.text.strip()
@@ -625,6 +660,9 @@ async def complete_setup(chat_id, context):
         "oioioi_password": context.user_data.get("oioioi_password"),
         "setup_complete": True,
     }
+
+    reset_user_data(context)
+
     save_chat_config(chat_id, config_data)
 
     # Clone repository
@@ -646,6 +684,27 @@ def delete_user_data(chat_id):
     chat_dir = get_chat_dir(chat_id)
     if os.path.exists(chat_dir):
         shutil.rmtree(chat_dir)
+
+
+def save_ssh_key(chat_id, ssh_key):
+    """
+    Save an SSH public key for a given chat ID.
+    """
+    # Validate the SSH key (basic validation)
+    if not (ssh_key.startswith("ssh-") and " " in ssh_key):
+        return False
+
+    chat_dir = get_chat_dir(chat_id)
+
+    if not os.path.exists(chat_dir):
+        os.makedirs(chat_dir)
+
+    ssh_key_path = os.path.join(chat_dir, "id_rsa.pub")
+
+    with open(ssh_key_path, "w") as key_file:
+        key_file.write(ssh_key)
+
+    return True
 
 
 def initialize_message_handlers(telegram_bot):
