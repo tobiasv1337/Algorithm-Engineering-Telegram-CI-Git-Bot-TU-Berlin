@@ -159,7 +159,7 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
 
     except Exception as e:
         telegram_bot.send_message(
-            chat_id, f"❌ *Error Processing User*\n{str(e)}\nI will retry in {Config.BACKOFF_TIME} seconds."
+            chat_id, f"❌ *Error Processing User*\n{str(e)}\nI will retry in {Config.BACKOFF_TIME.seconds} seconds."
         )
         error_tracker[chat_id] = (now, str(e))
 
