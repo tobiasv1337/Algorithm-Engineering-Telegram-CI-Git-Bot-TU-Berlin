@@ -325,9 +325,9 @@ async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Start repository configuration
     await update.message.reply_text(
-        "Hello, {user}! "
-        "🔧 Let's set up your repository for monitoring and auto-submissions.\n"
-        "Please provide the following details step-by-step."
+        f"Hello, {user}! 🔧\n"
+        "Let's set up your repository for monitoring and auto-submissions.\n"
+        "Please provide the following details step-by-step:"
     )
     await update.message.reply_text("What is the repository URL?")
     context.user_data["state"] = "initializing"

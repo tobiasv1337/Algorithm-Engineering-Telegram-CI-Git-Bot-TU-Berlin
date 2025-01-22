@@ -32,7 +32,7 @@ class OioioiAPI:
         """
         api_key = self.api_keys.get(contest_id)
         if not api_key:
-            raise KeyError(f"❌ No API key found for contest '{contest_id}'. Use /update to add it.")
+            raise KeyError(f"❌ No API key found for contest '{contest_id}'. Use /config to add it.")
         return api_key
 
     def login(self):
@@ -86,7 +86,7 @@ class OioioiAPI:
                 f"❌ *Submission Aborted*\n"
                 f"No API key found for contest '{contest_id}'.\n"
                 f"Please add the API key to continue.\n"
-                f"Use `/update` to add the API key."
+                f"Use `/config` to add the API key."
             )
             print(message)
             telegram_bot.send_message(chat_id, message)
