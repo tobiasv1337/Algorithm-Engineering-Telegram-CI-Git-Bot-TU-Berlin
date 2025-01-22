@@ -1,8 +1,8 @@
 *.pyc
+__pycache__/
 
 .env
-last_commits.json
-submission_history.json
+data/
 
 .DS_Store
 .vscode
