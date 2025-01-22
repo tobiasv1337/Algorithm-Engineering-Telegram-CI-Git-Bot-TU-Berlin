@@ -450,6 +450,7 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
             api_keys[contest_id] = new_value
             save_chat_config(chat_id, {"OIOIOI_API_KEYS": api_keys})
             await update.message.reply_text(f"API key for contest `{contest_id}` updated successfully!")
+            reset_user_data(context)
         elif key == "auth_method":
             save_chat_config(chat_id, {key: new_value})
             if new_value == "ssh":
@@ -460,7 +461,8 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 context.user_data["config_step"] = "git_username"
             elif new_value == "none":
                 await update.message.reply_text("Authentication method updated to 'none'.")
-                reclone_repository(update, chat_id, key)
+                await reclone_repository(update, chat_id, key)
+                reset_user_data(context)
             else:
                 await update.message.reply_text("Invalid authentication method. Please choose: [none, https, ssh]")
         else:
@@ -471,8 +473,7 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await reclone_repository(update, chat_id, key)
             else:
                 await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
-
-        reset_user_data(context)  # Reset state after update
+            reset_user_data(context)
 
     elif step == "ssh_generate":
         generate_key = update.message.text.strip().lower()
@@ -484,7 +485,7 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "SSH key generated successfully. Add the following public key to your repository:"
             )
             await update.message.reply_text(public_key)
-            reclone_repository(update, chat_id, key)
+            await reclone_repository(update, chat_id, "ssh_key")
             reset_user_data(context)
         elif generate_key == "no":
             await update.message.reply_text(
@@ -499,7 +500,7 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if save_ssh_key(chat_id, ssh_key):
             await update.message.reply_text("SSH key saved successfully!")
-            reclone_repository(update, chat_id, key)
+            await reclone_repository(update, chat_id, "ssh_key")
             reset_user_data(context)
         else:
             await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
