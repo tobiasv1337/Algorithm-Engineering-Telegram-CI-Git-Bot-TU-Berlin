@@ -158,6 +158,8 @@ def reset_user_data(context):
         "config_step",
         "update_key",
         "update_contest_id",
+        "ssh_public_key",
+        "ssh_private_key",
     ]
     for key in keys_to_remove:
         context.user_data.pop(key, None)  # Safely remove keys if they exist
@@ -456,7 +458,7 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
             save_chat_config(chat_id, {key: new_value})
             if new_value == "ssh":
-                await update.message.reply_text("Should I generate a new SSH key for you? (yes/no)")
+                await update.message.reply_text("Would you like me to generate an SSH key pair for you? (yes/no)")
                 context.user_data["config_step"] = "ssh_generate"
             elif new_value == "https":
                 await update.message.reply_text("Please provide your Git username.")
@@ -494,31 +496,56 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         generate_key = update.message.text.strip().lower()
         if generate_key == "yes":
             ssh_key_path = generate_ssh_key(chat_id)
-            with open(f"{ssh_key_path}.pub", "r") as key_file:
-                public_key = key_file.read()
+            with open(f"{ssh_key_path}.pub", "r") as pub_file:
+                public_key = pub_file.read()
+            with open(ssh_key_path, "r") as priv_file:
+                private_key = priv_file.read()
+
+            save_ssh_keys(chat_id, public_key, private_key)
+
             await update.message.reply_text(
-                "SSH key generated successfully. Add the following public key to your repository:"
+                "SSH key pair generated successfully! Add the public key to your repository's SSH settings.\n\n"
+                f"Public Key:"
             )
             await update.message.reply_text(public_key)
             await reclone_repository(update, chat_id, "ssh_key")
             reset_user_data(context)
         elif generate_key == "no":
             await update.message.reply_text(
-                "Please upload your SSH public key. Send the key as plain text (not a file!)."
+                "Please provide your SSH public key first.\n\n"
+                "It should start with `ssh-`. Copy and paste it as plain text."
             )
-            context.user_data["config_step"] = "ssh_provided"
+            context.user_data["config_step"] = "ssh_public_key"
         else:
             await update.message.reply_text("Invalid choice. Please respond with 'yes' or 'no'.")
 
-    elif step == "ssh_provided":
-        ssh_key = update.message.text.strip()
+    elif step == "ssh_public_key":
+        ssh_public_key = update.message.text.strip()
+        if ssh_public_key.startswith("ssh-") and " " in ssh_public_key:
+            context.user_data["ssh_public_key"] = ssh_public_key
+            await update.message.reply_text(
+                "Public key received. Now, please provide your private key.\n\n"
+                "The private key should start with `-----BEGIN OPENSSH PRIVATE KEY-----`.\n"
+                "Ensure you copy the entire key block and send it as plain text."
+            )
+            context.user_data["config_step"] = "ssh_private_key"
+        else:
+            await update.message.reply_text(
+                "Invalid public key format. Ensure it starts with `ssh-` and resend the key."
+            )
 
-        if save_ssh_key(chat_id, ssh_key):
-            await update.message.reply_text("SSH key saved successfully!")
+    elif step == "ssh_private_key":
+        ssh_private_key = update.message.text.strip()
+        if ssh_private_key.startswith("-----BEGIN OPENSSH PRIVATE KEY-----"):
+            save_ssh_keys(chat_id, context.user_data["ssh_public_key"], ssh_private_key)
+            del context.user_data["ssh_public_key"]
+            await update.message.reply_text("SSH keys saved successfully!")
             await reclone_repository(update, chat_id, "ssh_key")
             reset_user_data(context)
         else:
-            await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
+            await update.message.reply_text(
+                "Invalid private key format. Ensure it starts with `-----BEGIN OPENSSH PRIVATE KEY-----` and resend the key."
+            )
 
 
 async def reclone_repository(update: Update, chat_id, key):
@@ -619,7 +646,10 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("Please provide your Git username.")
             context.user_data["config_step"] = "git_username"
         elif auth_method == "ssh":
-            await update.message.reply_text("Should I generate an SSH key for you? (yes/no)")
+            await update.message.reply_text(
+                "Would you like me to generate an SSH key pair for you? (yes/no)\n\n"
+                "If you select 'no', you will need to provide both the public and private keys manually."
+            )
             context.user_data["config_step"] = "ssh_generate"
     elif step == "git_username":
         context.user_data["git_username"] = update.message.text.strip()
@@ -633,26 +663,54 @@ async def handle_initializing(update: Update, context: ContextTypes.DEFAULT_TYPE
         generate_key = update.message.text.lower().strip()
         if generate_key == "yes":
             ssh_key_path = generate_ssh_key(chat_id)
-            with open(f"{ssh_key_path}.pub", "r") as key_file:
-                public_key = key_file.read()
-            await update.message.reply_text("SSH key generated successfully. Add the following public key to your repository:")
+            with open(f"{ssh_key_path}.pub", "r") as pub_file:
+                public_key = pub_file.read()
+            with open(ssh_key_path, "r") as priv_file:
+                private_key = priv_file.read()
+
+            save_ssh_keys(chat_id, public_key, private_key)
+
+            await update.message.reply_text(
+                "SSH key pair generated successfully! Add the public key to your repository's SSH settings.\n\n"
+                f"Public Key:"
+            )
             await update.message.reply_text(public_key)
             await update.message.reply_text("Please provide your OIOIOI username.")
             context.user_data["config_step"] = "oioioi_username"
         elif generate_key == "no":
-            await update.message.reply_text("Please upload your SSH public key. Send the key as plain text (not a file!). Avoid any extra characters or spaces.")
-            context.user_data["config_step"] = "ssh_provided"
+            await update.message.reply_text(
+                "Please provide your SSH public key first.\n\n"
+                "It should start with `ssh-`. Copy and paste it as plain text."
+            )
+            context.user_data["config_step"] = "ssh_public_key"
         else:
-            await update.message.reply_text("Invalid choice. Please choose: [yes, no]")
-    elif step == "ssh_provided":
-        ssh_key = update.message.text.strip()
-
-        if save_ssh_key(chat_id, ssh_key):
-            await update.message.reply_text("SSH key saved successfully!")
+            await update.message.reply_text("Invalid choice. Please respond with 'yes' or 'no'.")
+    elif step == "ssh_public_key":
+        ssh_public_key = update.message.text.strip()
+        if ssh_public_key.startswith("ssh-") and " " in ssh_public_key:
+            context.user_data["ssh_public_key"] = ssh_public_key
+            await update.message.reply_text(
+                "Public key received. Now, please provide your private key.\n\n"
+                "The private key should start with `-----BEGIN OPENSSH PRIVATE KEY-----`.\n"
+                "Ensure you copy the entire key block and send it as plain text."
+            )
+            context.user_data["config_step"] = "ssh_private_key"
+        else:
+            await update.message.reply_text(
+                "Invalid public key format. Ensure it starts with `ssh-` and resend the key."
+            )
+    elif step == "ssh_private_key":
+        ssh_private_key = update.message.text.strip()
+        if ssh_private_key.startswith("-----BEGIN OPENSSH PRIVATE KEY-----"):
+            save_ssh_keys(chat_id, context.user_data["ssh_public_key"], ssh_private_key)
+            del context.user_data["ssh_public_key"]
+            await update.message.reply_text("SSH keys saved successfully!")
             await update.message.reply_text("Please provide your OIOIOI username.")
             context.user_data["config_step"] = "oioioi_username"
         else:
-            await update.message.reply_text("Invalid SSH key format. Please provide a valid SSH public key.")
+            await update.message.reply_text(
+                "Invalid private key format. Ensure it starts with `-----BEGIN OPENSSH PRIVATE KEY-----` and resend the key."
+            )
     elif step == "oioioi_username":
         context.user_data["oioioi_username"] = update.message.text.strip()
         await update.message.reply_text("Please provide your OIOIOI password.")
@@ -702,25 +760,25 @@ def delete_user_data(chat_id):
         shutil.rmtree(chat_dir)
 
 
-def save_ssh_key(chat_id, ssh_key):
+def save_ssh_keys(chat_id, public_key, private_key):
     """
-    Save an SSH public key for a given chat ID.
+    Save both the public and private SSH keys for a given chat ID.
     """
-    # Validate the SSH key (basic validation)
-    if not (ssh_key.startswith("ssh-") and " " in ssh_key):
-        return False
-
     chat_dir = get_chat_dir(chat_id)
 
     if not os.path.exists(chat_dir):
         os.makedirs(chat_dir)
 
-    ssh_key_path = os.path.join(chat_dir, "id_rsa.pub")
+    public_key_path = os.path.join(chat_dir, "id_rsa.pub")
+    private_key_path = os.path.join(chat_dir, "id_rsa")
 
-    with open(ssh_key_path, "w") as key_file:
-        key_file.write(ssh_key)
+    with open(public_key_path, "w") as pub_file:
+        pub_file.write(public_key)
+    with open(private_key_path, "w") as priv_file:
+        priv_file.write(private_key)
 
-    return True
+    # Set permissions for the private key
+    os.chmod(private_key_path, 0o600)
 
 
 def initialize_message_handlers(telegram_bot):
