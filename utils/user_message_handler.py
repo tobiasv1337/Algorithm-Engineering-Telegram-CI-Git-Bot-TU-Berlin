@@ -449,24 +449,20 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
             save_chat_config(chat_id, {"OIOIOI_API_KEYS": api_keys})
             await update.message.reply_text(f"API key for contest `{contest_id}` updated successfully!")
         else:
-            current_config = load_chat_config(chat_id)
-            old_value = current_config.get(key, None)
+            save_chat_config(chat_id, {key: new_value})
 
             if key in ["repo_url", "primary_branch", "auth_method"]:
-                await update_repository_config(chat_id, key, new_value, current_config, context)
+                await reclone_repository(update, chat_id, key, new_value)
             else:
-                save_chat_config(chat_id, {key: new_value})
                 await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
 
         reset_user_data(context)  # Reset state after update
 
 
-async def update_repository_config(chat_id, key, new_value, current_config, update):
+async def reclone_repository(update: Update, chat_id, key, new_value):
     """
-    Handle updates to repository-related configuration options, resetting and re-cloning the repository if needed.
+    Re-clone the repository after updating the configuration.
     """
-    # Save the updated key and value directly
-    save_chat_config(chat_id, {key: new_value})
 
     # Notify the user about the repository reset
     await update.message.reply_text(
@@ -483,7 +479,8 @@ async def update_repository_config(chat_id, key, new_value, current_config, upda
 
     # Re-clone the repository
     try:
-        clone_repository(chat_id, current_config["repo_url"], None)  # No bot parameter needed for cloning
+        repo_url = load_chat_config(chat_id)["repo_url"]
+        clone_repository(chat_id, repo_url)
         await update.message.reply_text("✅ Repository re-cloned successfully.")
     except Exception as e:
         await update.message.reply_text(
