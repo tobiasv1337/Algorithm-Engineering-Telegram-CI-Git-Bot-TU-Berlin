@@ -43,10 +43,10 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
         # Submit the solution
         submission_id = oioioi_api.submit_solution(chat_id, config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot)
         if submission_id:
-            # Append to pending submissions and save
+            # Append to pending submissions and save both contest_id and submission_id
             user_config = load_chat_config(chat_id)
             new_pending_submissions = user_config.get("pending_submissions", [])
-            new_pending_submissions.append(submission_id)
+            new_pending_submissions.append({"submission_id": submission_id, "contest_id": config["contest_id"]})
             save_chat_config(chat_id, {"pending_submissions": new_pending_submissions})
 
             # Notify user about the submission
@@ -72,13 +72,16 @@ def process_pending_submissions(chat_id, oioioi_api, telegram_bot):
     if pending_submissions and len(pending_submissions) > 0:
         oioioi_api.login()
 
-    for submission_id in pending_submissions:
-        results = oioioi_api.fetch_test_results(user_config["contest_id"], submission_id)
+    for submission in pending_submissions:
+        submission_id = submission["submission_id"]
+        contest_id = submission["contest_id"]
+
+        results = oioioi_api.fetch_test_results(contest_id, submission_id)
         if results:
             # Notify user about the results
-            results_url = oioioi_api.get_results_url(user_config["contest_id"], submission_id)
+            results_url = oioioi_api.get_results_url(contest_id, submission_id)
             telegram_bot.send_message(chat_id, f"📄 *Results Available*\n{results_url}")
-            completed_submissions.append(submission_id)
+            completed_submissions.append(submission)
 
     # Remove completed submissions from the list
     new_pending_submissions = [
