@@ -6,6 +6,18 @@ from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, 
 from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir
 from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
 
+# White-listed configuration options for /config command
+config_whitelist = [
+    "repo_url",
+    "primary_branch",
+    "auth_method",
+    "git_username",
+    "git_password",
+    "oioioi_username",
+    "oioioi_password",
+    "OIOIOI_API_KEYS",
+]
+
 
 async def register_commands(application: Application):
     """
@@ -355,18 +367,7 @@ async def config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Handle the /config command to let users update their configuration values.
     """
 
-    # Show available options for configuring
-    options = [
-        "repo_url",
-        "primary_branch",
-        "auth_method",
-        "git_username",
-        "git_password",
-        "oioioi_username",
-        "oioioi_password",
-        "OIOIOI_API_KEYS",
-    ]
-    options_text = "\n".join([f"- {option}" for option in options])
+    options_text = "\n".join([f"- {option}" for option in config_whitelist])
     await update.message.reply_text(
         f"Which configuration value would you like to update?\n\n{options_text}\n\n"
         "Send the name of the value (e.g., `repo_url`)."
@@ -390,9 +391,15 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if key == "OIOIOI_API_KEYS":
             await update.message.reply_text("Enter the contest ID you want to update:")
             context.user_data["update_step"] = "choose_contest"
-        else:
+        elif key in config_whitelist:
             await update.message.reply_text(f"Enter the new value for `{key}`:")
             context.user_data["update_step"] = "update_value"
+        else:
+            await update.message.reply_text(
+                f"Invalid configuration option. Please choose from the following:\n\n"
+                f"{', '.join(config_whitelist)}"
+            )
+            return
 
     elif step == "choose_contest":
         contest_id = update.message.text.strip()
