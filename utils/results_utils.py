@@ -3,7 +3,7 @@ import time
 import os
 import json
 
-SUBMISSION_HISTORY_FILE = "submission_history.json"  # File to store submission history
+SUBMISSION_HISTORY_FILE = "data/submission_history.json"  # File to store submission history
 
 
 def parse_numeric_value(value):
@@ -73,12 +73,12 @@ def format_results_message(grouped_results, results_url):
     return messages
 
 
-def compare_results(contest_id, grouped_results):
+def compare_results(chat_id, contest_id, grouped_results):
     """
     Compare current results with historical data and generate a detailed summary.
     Includes changes in solved tests, runtime improvements, and group-specific details.
     """
-    history = load_submission_history()
+    history = load_submission_history(chat_id)  # Load submission history for the specific chat ID
 
     # Handle compilation or other errors
     if "error" in grouped_results:
@@ -201,7 +201,7 @@ def compare_results(contest_id, grouped_results):
         "group_results": updated_group_results,
         "timestamp": time.time(),
     }
-    save_submission_history(history)
+    save_submission_history(chat_id, history)  # Save submission history for the specific chat ID
 
     # Combine summary and group-specific changes
     comparison_message = "\n".join(summary)
@@ -210,34 +210,43 @@ def compare_results(contest_id, grouped_results):
     return f"{comparison_message}\n\n*Group Details:*\n{group_changes_message}"
 
 
-def send_results_summary_to_telegram(contest_id, grouped_results, results_url, telegram_bot):
+def send_results_summary_to_telegram(chat_id, contest_id, grouped_results, results_url, telegram_bot):
     """
-    Send a detailed summary of improvements and results via Telegram.
+    Send a detailed summary of improvements and results via Telegram for a specific chat ID.
     """
     # Generate detailed results messages
     detailed_messages = format_results_message(grouped_results, results_url)
 
     # Generate improvement summary
-    improvement_summary = compare_results(contest_id, grouped_results)
+    improvement_summary = compare_results(chat_id, contest_id, grouped_results)
     summary_message = f"🚀 *Improvement Summary*:\n{improvement_summary}\n\n📥 [View Full Results Here]({results_url})"
 
     # Send detailed test results first
     for message in detailed_messages:
-        telegram_bot.send_message(message)
+        telegram_bot.send_message(chat_id, message)
 
     # Send the improvement summary after detailed results
-    telegram_bot.send_message(summary_message)
+    telegram_bot.send_message(chat_id, summary_message)
 
 
-def load_submission_history():
-    """Load historical submission data from a file."""
+def load_submission_history(chat_id):
+    """Load historical submission data for a specific chat ID from a file."""
     if os.path.exists(SUBMISSION_HISTORY_FILE):
         with open(SUBMISSION_HISTORY_FILE, 'r') as f:
-            return json.load(f)
+            all_histories = json.load(f)
+        return all_histories.get(str(chat_id), {})
     return {}
 
 
-def save_submission_history(history):
-    """Save historical submission data to a file."""
+def save_submission_history(chat_id, history):
+    """Save historical submission data for a specific chat ID to the file."""
+    if os.path.exists(SUBMISSION_HISTORY_FILE):
+        with open(SUBMISSION_HISTORY_FILE, 'r') as f:
+            all_histories = json.load(f)
+    else:
+        all_histories = {}
+
+    all_histories[str(chat_id)] = history
+
     with open(SUBMISSION_HISTORY_FILE, 'w') as f:
-        json.dump(history, f, indent=4)
+        json.dump(all_histories, f, indent=4)

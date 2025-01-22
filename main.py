@@ -11,6 +11,7 @@ from handlers.compilation_manager import check_for_compiler_errors
 from datetime import datetime, timedelta
 from utils.user_message_handler import initialize_message_handlers, register_commands
 from telegram.ext import Application
+from utils.results_utils import send_results_summary_to_telegram
 
 # Global error tracker to handle backoff time for chat IDs
 error_tracker = {}
@@ -80,7 +81,7 @@ def process_pending_submissions(chat_id, oioioi_api, telegram_bot):
         if results:
             # Notify user about the results
             results_url = oioioi_api.get_results_url(contest_id, submission_id)
-            telegram_bot.send_message(chat_id, f"📄 *Results Available*\n{results_url}")
+            send_results_summary_to_telegram(chat_id, contest_id, results, results_url, telegram_bot)
             completed_submissions.append(submission)
 
     # Remove completed submissions from the list
