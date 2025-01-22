@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 from utils.user_message_handler import initialize_message_handlers, register_commands
 from telegram.ext import Application
 
+# Global error tracker to handle backoff time for chat IDs
+error_tracker = {}
+
 
 def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram_bot):
     """
@@ -126,18 +129,39 @@ def process_chat_id(chat_id, oioioi_api, telegram_bot):
     """
     Process all tasks for a single chat ID.
     """
-    user_config = load_chat_config(chat_id)
-    if not user_config:
-        raise ValueError(f"No configuration found for chat ID: {chat_id}")
+    global error_tracker
+    now = datetime.now()
 
-    # Check for new commits
-    fetch_all_branches(chat_id, telegram_bot)
-    branches_to_check = get_tracked_branches(chat_id, telegram_bot)
-    for branch in branches_to_check:
-        process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot)
+    # Check if this chat ID is in an error state and respect the backoff time
+    if chat_id in error_tracker:
+        last_error_time, _ = error_tracker[chat_id]
+        if now - last_error_time < Config.BACKOFF_TIME:
+            return  # Skip processing this chat ID
 
-    # Process pending submissions
-    process_pending_submissions(chat_id, oioioi_api, telegram_bot)
+    try:
+        user_config = load_chat_config(chat_id)
+        if not user_config:
+            raise ValueError(f"No configuration found for chat ID: {chat_id}")
+
+        # Check for new commits
+        fetch_all_branches(chat_id, telegram_bot)
+        branches_to_check = get_tracked_branches(chat_id, telegram_bot)
+
+        for branch in branches_to_check:
+            process_branch(chat_id, branch, user_config, oioioi_api, telegram_bot)
+
+        # Process pending submissions
+        process_pending_submissions(chat_id, oioioi_api, telegram_bot)
+
+        # Clear error state if successful
+        if chat_id in error_tracker:
+            del error_tracker[chat_id]
+
+    except Exception as e:
+        telegram_bot.send_message(
+            chat_id, f"❌ *Error Processing User*\n{str(e)}\nI will retry in {Config.BACKOFF_TIME} seconds."
+        )
+        error_tracker[chat_id] = (now, str(e))
 
 
 async def ci_task_loop():
