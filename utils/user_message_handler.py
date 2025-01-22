@@ -4,7 +4,7 @@ import json
 from telegram import Update, BotCommand
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, Application
 from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir, delete_last_commit_data
-from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config, get_repo_path
+from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config, get_repo_path, delete_old_auth_data
 
 # White-listed configuration options for /config command
 config_whitelist = [
@@ -452,6 +452,8 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text(f"API key for contest `{contest_id}` updated successfully!")
             reset_user_data(context)
         elif key == "auth_method":
+            delete_old_auth_data(chat_id)
+
             save_chat_config(chat_id, {key: new_value})
             if new_value == "ssh":
                 await update.message.reply_text("Should I generate a new SSH key for you? (yes/no)")
@@ -474,6 +476,19 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
             reset_user_data(context)
+
+    elif step == "git_username":
+        git_username = update.message.text.strip()
+        save_chat_config(chat_id, {"git_username": git_username})
+        await update.message.reply_text("Please provide your Git password.")
+        context.user_data["config_step"] = "git_password"
+
+    elif step == "git_password":
+        git_password = update.message.text.strip()
+        save_chat_config(chat_id, {"git_password": git_password})
+        await update.message.reply_text("Git credentials updated successfully.")
+        await reclone_repository(update, chat_id, "auth_method")
+        reset_user_data(context)
 
     elif step == "ssh_generate":
         generate_key = update.message.text.strip().lower()

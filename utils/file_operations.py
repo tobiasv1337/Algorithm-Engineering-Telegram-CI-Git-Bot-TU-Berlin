@@ -75,6 +75,30 @@ def delete_chat_config(chat_id):
             json.dump(all_configs, file, indent=4)
 
 
+def delete_old_auth_data(chat_id):
+    """
+    Delete old authentication data based on the previous authentication method.
+    """
+    current_config = load_chat_config(chat_id)
+    auth_method = current_config.get("auth_method")
+    chat_dir = get_chat_dir(chat_id)
+
+    if auth_method == "ssh":
+        # Remove SSH key files
+        ssh_key_path = os.path.join(chat_dir, "id_rsa")
+        ssh_key_pub_path = f"{ssh_key_path}.pub"
+        if os.path.exists(ssh_key_path):
+            os.remove(ssh_key_path)
+        if os.path.exists(ssh_key_pub_path):
+            os.remove(ssh_key_pub_path)
+    elif auth_method == "https":
+        # Clear Git username and password
+        current_config.pop("git_username", None)
+        current_config.pop("git_password", None)
+
+    save_chat_config(chat_id, current_config)
+
+
 def create_zip_files(config, chat_id):
     """
     Create multiple ZIP files based on the `zip_files` configuration provided.
