@@ -19,6 +19,21 @@ config_whitelist = [
 ]
 
 
+async def ensure_user_setup(chat_id, update):
+    """
+    Check if the user has completed the setup.
+    If not, send an error message. Return True if setup is complete.
+    """
+    config = load_chat_config(chat_id)
+    if not config or not config.get("setup_complete", False):
+        await update.message.reply_text(
+            "❌ The bot is not fully configured yet.\n"
+            "Please complete the setup using /setup before accessing this command."
+        )
+        return False
+    return True
+
+
 async def register_commands(application: Application):
     """
     Register bot commands to show them in the list when the user types '/'.
@@ -53,6 +68,9 @@ async def add_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     chat_id = update.effective_chat.id
 
+    if not await ensure_user_setup(chat_id, update):
+        return
+
     if not context.args or not context.args[0].lstrip("-").isdigit():
         await update.message.reply_text("Usage: /add_chat_id <chat_id>")
         return
@@ -81,6 +99,9 @@ async def remove_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     chat_id = update.effective_chat.id
 
+    if not await ensure_user_setup(chat_id, update):
+        return
+
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /remove_chat_id <chat_id>")
         return
@@ -108,6 +129,9 @@ async def list_chat_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     List all chat IDs in the broadcast list.
     """
     chat_id = update.effective_chat.id
+
+    if not await ensure_user_setup(chat_id, update):
+        return
 
     config = load_chat_config(chat_id)
     if not config:
@@ -366,6 +390,10 @@ async def config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle the /config command to let users update their configuration values.
     """
+    chat_id = update.effective_chat.id
+
+    if not await ensure_user_setup(chat_id, update):
+        return
 
     options_text = "\n".join([f"- {option}" for option in config_whitelist])
     await update.message.reply_text(
