@@ -4,7 +4,7 @@ import json
 from telegram import Update, BotCommand
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, Application
 from git_manager.git_operations import generate_ssh_key, clone_repository, get_chat_dir, delete_last_commit_data
-from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config
+from utils.file_operations import save_chat_config, load_chat_config, delete_chat_config, get_repo_path
 
 # White-listed configuration options for /config command
 config_whitelist = [
@@ -417,9 +417,11 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["update_key"] = key
 
         if key == "OIOIOI_API_KEYS":
+            # Handle nested configuration for API keys
             await update.message.reply_text("Enter the contest ID you want to update:")
             context.user_data["update_step"] = "choose_contest"
         elif key in config_whitelist:
+            # Proceed with general configuration updates
             await update.message.reply_text(f"Enter the new value for `{key}`:")
             context.user_data["update_step"] = "update_value"
         else:
@@ -437,20 +439,56 @@ async def handle_update_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif step == "update_value":
         key = context.user_data.get("update_key")
-        value = update.message.text.strip()
+        new_value = update.message.text.strip()
 
         if key == "OIOIOI_API_KEYS":
             contest_id = context.user_data.get("update_contest_id")
             current_config = load_chat_config(chat_id) or {}
             api_keys = current_config.get("OIOIOI_API_KEYS", {})
-            api_keys[contest_id] = value
+            api_keys[contest_id] = new_value
             save_chat_config(chat_id, {"OIOIOI_API_KEYS": api_keys})
             await update.message.reply_text(f"API key for contest `{contest_id}` updated successfully!")
         else:
-            save_chat_config(chat_id, {key: value})
-            await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
+            current_config = load_chat_config(chat_id)
+            old_value = current_config.get(key, None)
+
+            if key in ["repo_url", "primary_branch", "auth_method"]:
+                await update_repository_config(chat_id, key, new_value, current_config, context)
+            else:
+                save_chat_config(chat_id, {key: new_value})
+                await update.message.reply_text(f"Configuration for `{key}` updated successfully!")
 
         reset_user_data(context)  # Reset state after update
+
+
+async def update_repository_config(chat_id, key, new_value, current_config, update):
+    """
+    Handle updates to repository-related configuration options, resetting and re-cloning the repository if needed.
+    """
+    # Save the updated key and value directly
+    save_chat_config(chat_id, {key: new_value})
+
+    # Notify the user about the repository reset
+    await update.message.reply_text(
+        f"⚠️ *Configuration Updated*\n"
+        f"• `{key}` has been changed.\n"
+        "The repository will be reset and re-cloned with the new configuration."
+    )
+
+    # Delete the old repository
+    repo_path = get_repo_path(chat_id)
+    if os.path.exists(repo_path):
+        shutil.rmtree(repo_path)
+        await update.message.reply_text("Old repository deleted.")
+
+    # Re-clone the repository
+    try:
+        clone_repository(chat_id, current_config["repo_url"], None)  # No bot parameter needed for cloning
+        await update.message.reply_text("✅ Repository re-cloned successfully.")
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ *Error Re-Cloning Repository*\nDetails: {e}"
+        )
 
 
 async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
