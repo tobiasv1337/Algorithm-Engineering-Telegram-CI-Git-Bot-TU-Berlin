@@ -238,29 +238,33 @@ def get_tracked_branches(chat_id, telegram_bot):
     """
     Retrieve the list of branches to track for the given chat ID.
     Defaults to the primary branch specified in the global configuration.
-    Sends appropriate error messages for missing configurations or fallback usage.
+    Raises an exception for critical errors.
     """
     global_config = load_chat_config(chat_id)
     primary_branch = global_config.get("primary_branch", "master")
 
     primary_branch_commit = get_latest_commit(chat_id, primary_branch, telegram_bot)
-    if primary_branch_commit:
-        try:
-            config = load_config_from_commit(chat_id, primary_branch_commit)
-            if config and "branches" in config:
-                return config["branches"]
-        except FileNotFoundError:
-            telegram_bot.send_message(
-                chat_id,
-                f"❌ *Configuration Missing*\nMissing `submission_config.json` on `{primary_branch}`."
-            )
+    if not primary_branch_commit:
+        raise RuntimeError(
+            f"Failed to retrieve the latest commit for branch `{primary_branch}`. "
+            f"Ensure the branch exists and is up-to-date."
+        )
 
-    telegram_bot.send_message(
-        chat_id,
-        f"⚠️ *Using Fallback Branch*\nDefaulting to `{primary_branch}`."
-    )
-    # Default to the primary branch if no tracking branches are found
-    return [primary_branch]
+    try:
+        config = load_config_from_commit(chat_id, primary_branch_commit)
+        if config and "branches" in config:
+            return config["branches"]
+        else:
+            raise ValueError(
+                f"Missing or invalid configuration in `submission_config.json` on `{primary_branch}`."
+            )
+    except FileNotFoundError as e:
+        error_message = (
+            f"❌ *Configuration Missing*\n"
+            f"Missing `submission_config.json` on `{primary_branch}`."
+        )
+        telegram_bot.send_message(chat_id, error_message)
+        raise RuntimeError(error_message) from e
 
 
 def load_config_from_commit(chat_id, commit_hash, config_filename="submission_config.json"):
