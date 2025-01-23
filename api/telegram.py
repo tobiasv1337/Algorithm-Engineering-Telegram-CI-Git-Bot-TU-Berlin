@@ -1,3 +1,4 @@
+import re
 import requests
 from utils.file_operations import load_chat_config
 
@@ -9,6 +10,23 @@ class TelegramBot:
         """
         self.token = token
         self.base_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+    
+    def escape_markdown(text, version=2, exclude=None):
+        """
+        Escapes Telegram Markdown characters in a given text.
+        By default, it escapes for MarkdownV2.
+        """
+        if exclude is None:
+            exclude = set()
+
+        if version == 2:
+            escape_chars = r"_*[]()~`>#+-=|{}.!"
+        else:  # For MarkdownV1
+            escape_chars = r"_*[]()"
+
+        escape_chars = ''.join(char for char in escape_chars if char not in exclude)
+
+        return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
 
     def send_message(self, chat_id, message, parse_mode="MarkdownV2", disable_web_page_preview=True, broadcast_mode=True):
         """
@@ -23,13 +41,6 @@ class TelegramBot:
             broadcast_mode (bool): Whether to broadcast the message to additional configured chat IDs (default: True).
         """
         max_length = 4096  # Telegram's maximum message length
-
-        def escape_markdown(text, exclude=None):
-            """Escape special characters in text for Telegram Markdown while preserving formatting."""
-            if exclude is None:
-                exclude = set('*')  # Allow bold
-            escape_chars = '_*[]()~`>#+-=|{}.!'
-            return ''.join(f'\\{char}' if char in escape_chars and char not in exclude else char for char in text)
 
         def split_message_by_newline(message, max_length):
             """
@@ -56,7 +67,7 @@ class TelegramBot:
             return parts
 
         # Escape special characters while keeping bold and italic
-        escaped_message = escape_markdown(message, exclude={'*'})
+        escaped_message = self.escape_markdown(message, version=2, exclude={"*"})
 
         # Split message using the newline-aware function
         split_messages = split_message_by_newline(escaped_message, max_length)

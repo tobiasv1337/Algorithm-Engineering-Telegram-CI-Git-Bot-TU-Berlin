@@ -4,6 +4,7 @@ from zipfile import ZipFile
 from handlers import LANGUAGE_HANDLERS
 from utils.file_operations import create_zip_files
 from handlers.base_handler import CompilationError
+from api.telegram import TelegramBot
 
 
 def check_for_compiler_errors(chat_id, config, telegram_bot):
@@ -50,7 +51,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                     if result.warnings:
                         warning_message = (
                             f"⚠️ *Warnings Detected in {os.path.basename(zip_file)}*\n\n"
-                            f"{result.warnings}"
+                            f"{telegram_bot.escape_markdown(result.warnings)}"
                         )
                         print(warning_message)
                         telegram_bot.send_message(chat_id, warning_message)
@@ -63,7 +64,8 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
 
                 except CompilationError as e:
                     error_message = (
-                        f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n{str(e)}"
+                        f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n"
+                        f"{telegram_bot.escape_markdown(str(e))}"
                     )
                     print(error_message)
                     telegram_bot.send_message(chat_id, error_message)
@@ -76,7 +78,7 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                 unexpected_error_message = (
                     f"❌ *Unexpected Error During Compilation Check*\n\n"
                     f"Project: `{os.path.basename(zip_file)}`\n"
-                    f"Error: {str(e)}"
+                    f"Error: {telegram_bot.escape_markdown(str(e))}"
                 )
                 print(unexpected_error_message)
                 telegram_bot.send_message(chat_id, unexpected_error_message)
