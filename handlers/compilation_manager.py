@@ -49,12 +49,13 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
                     result = handler.compile(temp_dir_extract)
 
                     if result.warnings:
+                        warnings_text = "\n".join(result.warnings) if isinstance(result.warnings, list) else str(result.warnings)
                         warning_message = (
-                            f"⚠️ *Warnings Detected in {os.path.basename(zip_file)}*\n\n"
-                            f"{telegram_bot.escape_markdown(result.warnings)}"
+                            f"⚠️ *Warnings Detected in {TelegramBot.escape_markdown(os.path.basename(zip_file))}*\n\n"
+                            f"{TelegramBot.escape_markdown(warnings_text)}"
                         )
                         print(warning_message)
-                        telegram_bot.send_message(chat_id, warning_message)
+                        telegram_bot.send_message(chat_id, warning_message, bypass_escaping=True)
 
                         if not config.get("ALLOW_WARNINGS", False):
                             all_projects_meet_criteria = False
@@ -64,11 +65,11 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
 
                 except CompilationError as e:
                     error_message = (
-                        f"❌ *Compiler Errors Detected in {os.path.basename(zip_file)}*\n\n"
-                        f"{telegram_bot.escape_markdown(str(e))}"
+                        f"❌ *Compiler Errors Detected in {TelegramBot.escape_markdown(os.path.basename(zip_file))}*\n\n"
+                        f"{TelegramBot.escape_markdown(str(e))}"
                     )
                     print(error_message)
-                    telegram_bot.send_message(chat_id, error_message)
+                    telegram_bot.send_message(chat_id, error_message, bypass_escaping=True)
 
                     if not config.get("ALLOW_ERRORS", False):
                         all_projects_meet_criteria = False
@@ -77,11 +78,11 @@ def check_for_compiler_errors(chat_id, config, telegram_bot):
             except Exception as e:
                 unexpected_error_message = (
                     f"❌ *Unexpected Error During Compilation Check*\n\n"
-                    f"Project: `{os.path.basename(zip_file)}`\n"
-                    f"Error: {telegram_bot.escape_markdown(str(e))}"
+                    f"Project: `{TelegramBot.escape_markdown(os.path.basename(zip_file))}`\n"
+                    f"Error: {TelegramBot.escape_markdown(str(e))}"
                 )
                 print(unexpected_error_message)
-                telegram_bot.send_message(chat_id, unexpected_error_message)
+                telegram_bot.send_message(chat_id, unexpected_error_message, bypass_escaping=True)
                 all_projects_meet_criteria = False
                 break
 

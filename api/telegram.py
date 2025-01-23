@@ -11,6 +11,7 @@ class TelegramBot:
         self.token = token
         self.base_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
     
+    @staticmethod
     def escape_markdown(text, version=2, exclude=None):
         """
         Escapes Telegram Markdown characters in a given text.
@@ -28,7 +29,7 @@ class TelegramBot:
 
         return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
 
-    def send_message(self, chat_id, message, parse_mode="MarkdownV2", disable_web_page_preview=True, broadcast_mode=True):
+    def send_message(self, chat_id, message, parse_mode="MarkdownV2", disable_web_page_preview=True, broadcast_mode=True, bypass_escaping=False):
         """
         Send a message to a single chat or broadcast to additional configured chat IDs if broadcast_mode is enabled.
         Automatically splits long messages if needed. Splits at newline characters when possible.
@@ -67,10 +68,11 @@ class TelegramBot:
             return parts
 
         # Escape special characters while keeping bold and italic
-        escaped_message = self.escape_markdown(message, version=2, exclude={"*"})
+        if not bypass_escaping:
+            message = TelegramBot.escape_markdown(message, 2, {"*"})
 
         # Split message using the newline-aware function
-        split_messages = split_message_by_newline(escaped_message, max_length)
+        split_messages = split_message_by_newline(message, max_length)
 
         chat_ids = [chat_id]
         if broadcast_mode:
