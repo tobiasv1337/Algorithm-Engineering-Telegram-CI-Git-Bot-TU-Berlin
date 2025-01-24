@@ -302,7 +302,7 @@ def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_b
             telegram_bot.send_message(
                 chat_id,
                 f"⚠️ *Auto-Merge Skipped*\n"
-                f"Branch `{branch}` was not merged into `{primary_branch}` due to test failures.\n"
+                f"Branch `{branch}` was not merged into `{primary_branch}` due to failed tests.\n"
                 f"Tests Passed: {passed_tests}/{total_tests}"
             )
             return
