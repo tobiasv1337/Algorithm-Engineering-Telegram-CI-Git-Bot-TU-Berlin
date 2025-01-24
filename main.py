@@ -2,7 +2,7 @@ import time
 import signal
 import asyncio
 from config.config import Config
-from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches)
+from git_manager.git_operations import (get_commit_message, load_last_commit, save_last_commit, fetch_all_branches, get_latest_commit, reset_to_commit, load_config_from_commit, get_tracked_branches, perform_auto_merge)
 from api.oioioi import OioioiAPI
 from api.telegram import TelegramBot
 from utils.file_operations import create_zip_files, load_chat_config, save_chat_config, get_all_chat_configs
@@ -44,10 +44,14 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
         # Submit the solution
         submission_id = oioioi_api.submit_solution(chat_id, config["contest_id"], config["problem_short_name"], zip_files, branch, telegram_bot)
         if submission_id:
-            # Append to pending submissions and save both contest_id and submission_id
+            # Append to pending submissions and save both contest_id, submission_id, and commit_hash
             user_config = load_chat_config(chat_id)
             new_pending_submissions = user_config.get("pending_submissions", [])
-            new_pending_submissions.append({"submission_id": submission_id, "contest_id": config["contest_id"]})
+            new_pending_submissions.append({
+                "submission_id": submission_id,
+                "contest_id": config["contest_id"],
+                "commit_hash": current_commit
+            })
             save_chat_config(chat_id, {"pending_submissions": new_pending_submissions})
 
             # Notify user about the submission
@@ -64,7 +68,7 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
 
 def process_pending_submissions(chat_id, oioioi_api, telegram_bot):
     """
-    Process pending submissions for a given chat ID.
+    Process pending submissions for a given chat ID and handle auto-merge if configured.
     """
     user_config = load_chat_config(chat_id)
     pending_submissions = user_config.get("pending_submissions", [])
@@ -76,12 +80,19 @@ def process_pending_submissions(chat_id, oioioi_api, telegram_bot):
     for submission in pending_submissions:
         submission_id = submission["submission_id"]
         contest_id = submission["contest_id"]
+        commit_hash = submission["commit_hash"]
 
         results = oioioi_api.fetch_test_results(contest_id, submission_id)
         if results:
             # Notify user about the results
             results_url = oioioi_api.get_results_url(contest_id, submission_id)
             send_results_summary_to_telegram(chat_id, contest_id, results, results_url, telegram_bot)
+
+            # Perform auto-merge if configured
+            branch = user_config.get("auto_merge_branch")
+            if branch:
+                perform_auto_merge(chat_id, branch, results, commit_hash, telegram_bot)
+
             completed_submissions.append(submission)
 
     # Remove completed submissions from the list

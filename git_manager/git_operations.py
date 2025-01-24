@@ -296,6 +296,17 @@ def perform_auto_merge(chat_id, branch, grouped_results, commit_hash, telegram_b
         passed_tests = sum(
             1 for group in grouped_results.values() for test in group["tests"] if test["result"].lower() == "ok"
         )
+
+        # Ensure all tests passed before proceeding with the merge
+        if passed_tests != total_tests:
+            telegram_bot.send_message(
+                chat_id,
+                f"⚠️ *Auto-Merge Skipped*\n"
+                f"Branch `{branch}` was not merged into `{primary_branch}` due to test failures.\n"
+                f"Tests Passed: {passed_tests}/{total_tests}"
+            )
+            return
+
         test_summary = f"Tests Passed: {passed_tests}/{total_tests}"
 
         # Step 2: Fetch the latest changes for the branch
