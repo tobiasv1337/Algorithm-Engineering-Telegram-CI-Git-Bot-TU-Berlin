@@ -88,8 +88,18 @@ def process_pending_submissions(chat_id, oioioi_api, telegram_bot):
             results_url = oioioi_api.get_results_url(contest_id, submission_id)
             send_results_summary_to_telegram(chat_id, contest_id, results, results_url, telegram_bot)
 
+            # Load the submission configuration from the specific commit
+            try:
+                submission_config = load_config_from_commit(chat_id, commit_hash)
+            except FileNotFoundError:
+                telegram_bot.send_message(
+                    chat_id,
+                    f"⚠️ *Auto-Merge Skipped*: Missing submission_config.json for commit `{commit_hash}`."
+                )
+                continue
+
             # Perform auto-merge if configured
-            branch = user_config.get("auto_merge_branch")
+            branch = submission_config.get("auto_merge_branch")
             if branch:
                 perform_auto_merge(chat_id, branch, results, commit_hash, telegram_bot)
 
