@@ -20,15 +20,15 @@ config_whitelist = [
 
 TERMS_AND_CONDITIONS = (
     "📜 *Terms and Conditions*\n\n"
-    "1️⃣ The owner of this bot is not responsible/liable for any problems that occur due to its usage. "
-    "By using this bot, you accept that the usage is entirely at your own risk.\n\n"
-    "2️⃣ Any attacks on this bot, including malicious activity, are forbidden. "
-    "All activity is logged and may be forwarded to local authorities if necessary.\n\n"
-    "3️⃣ This bot is intended only for use within the TU Berlin course. "
-    "As credentials are valid only for this course, the bot stores repositories, configuration data, and credentials (including passwords) in plain text. "
-    "Only provide data that you are comfortable with sharing. By using this bot, you agree to accept this risk.\n\n"
-    "By typing *`accept`*, you agree to these terms and conditions and can proceed with the setup.\n"
-    "If you do not agree, type *`abort`*."
+    "1️⃣ The owner of this bot is not responsible/liable for any problems that occur due to its usage\\. "
+    "By using this bot, you accept that the usage is entirely at your own risk\\.\n\n"
+    "2️⃣ Any attacks on this bot, including malicious activity, are forbidden\\. "
+    "All activity is logged and may be forwarded to local authorities if necessary\\.\n\n"
+    "3️⃣ This bot is intended only for use within the TU Berlin course\\. "
+    "As credentials are valid only for this course, the bot stores repositories, configuration data, and credentials \\(including passwords\\) in plain text\\. "
+    "Only provide data that you are comfortable with sharing\\. By using this bot, you agree to accept this risk\\.\n\n"
+    "By typing *`accept`*, you agree to these terms and conditions and can proceed with the setup\\.\n"
+    "If you do not agree, type *`abort`*\\."
 )
 
 
@@ -204,7 +204,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2️⃣ Add additional chats \\(e\\.g\\. a group chat\\) by:\n"
         "   • Adding the bot to the chat\\.\n"
         "   • Running /get\\_chat\\_id in the group to retrieve its ID\\.\n"
-        "   • Running /add\\_chat\\_id \<chat\\_id\> in your private chat with the bot to link the group\\.\n\n"
+        "   • Running /add\\_chat\\_id <chat\\_id\\> in your private chat with the bot to link the group\\.\n\n"
         "📚 *Help and Configuration:*\n"
         "• Use /help to view all available commands and instructions\\.\n"
         "• Use /config to update settings like the OIOIOI API key for a new contest\\.\n"
@@ -251,10 +251,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   \\- Update OIOIOI API keys for new contests\\.\n"
         "   \\- Use this command to adjust existing settings without redoing the setup\\.\n\n"
         "• /get\\_chat\\_id \\- Retrieve the current chat's ID\\. Useful when adding the bot to a group or secondary chat\\.\n\n"
-        "• /add\\_chat\\_id \<chat\\_id\> \\- Add another chat to the bot's broadcast list:\n"
+        "• /add\\_chat\\_id <chat\\_id\\> \\- Add another chat to the bot's broadcast list:\n"
         "   \\- Use `/get\\_chat\\_id` in the target chat to retrieve its ID\\.\n"
         "   \\- Run this command with the retrieved ID in your main bot chat to link the additional chat\\.\n\n"
-        "• /remove\\_chat\\_id \<chat\\_id\> \\- Remove a previously linked chat from the broadcast list:\n"
+        "• /remove\\_chat\\_id <chat\\_id\\> \\- Remove a previously linked chat from the broadcast list:\n"
         "   \\- Specify the chat ID to stop broadcasting messages to that chat\\.\n\n"
         "• /list\\_chat\\_ids \\- List all linked chats that the bot broadcasts to:\n"
         "   \\- Displays the IDs of all configured chats for verification\\.\n\n"
@@ -281,7 +281,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "3️⃣ Add additional chats \\(e\\.g\\., group chat\\):\n"
         "   • Add the bot to the group\\.\n"
         "   • Run /get\\_chat\\_id in the group to get its ID\\.\n"
-        "   • Use /add\\_chat\\_id \<chat\\_id\> to link the group to the bot\\.\n\n"
+        "   • Use /add\\_chat\\_id <chat\\_id\\> to link the group to the bot\\.\n\n"
         
         "💡 *Tips:*\n"
         "• Use /config to modify settings like OIOIOI API keys or repository details\\.\n"
@@ -376,7 +376,7 @@ async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Send terms and conditions
     await update.message.reply_text(
-        "Hello, {user}! 🔧 Let's set up your repository for monitoring and auto-submissions.\n"
+        f"Hello, {user}! 🔧 Let's set up your repository for monitoring and auto-submissions.\n"
         "Before proceeding, please review and accept the terms and conditions.",
     )
     await update.message.reply_text(TERMS_AND_CONDITIONS, parse_mode="MarkdownV2")
