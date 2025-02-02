@@ -18,6 +18,19 @@ config_whitelist = [
     "OIOIOI_API_KEYS",
 ]
 
+TERMS_AND_CONDITIONS = (
+    "📜 *Terms and Conditions*\n\n"
+    "1️⃣ The owner of this bot is not responsible/liable for any problems that occur due to its usage. "
+    "By using this bot, you accept that the usage is entirely at your own risk.\n\n"
+    "2️⃣ Any attacks on this bot, including malicious activity, are forbidden. "
+    "All activity is logged and may be forwarded to local authorities if necessary.\n\n"
+    "3️⃣ This bot is intended only for use within the TU Berlin course. "
+    "As credentials are valid only for this course, the bot stores repositories, configuration data, and credentials (including passwords) in plain text. "
+    "Only provide data that you are comfortable with sharing. By using this bot, you agree to accept this risk.\n\n"
+    "By typing *`accept`*, you agree to these terms and conditions and can proceed with the setup.\n"
+    "If you do not agree, type *`abort`*."
+)
+
 
 async def ensure_user_setup(chat_id, update):
     """
@@ -361,27 +374,40 @@ async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Welcome back, {user}! Your repository is already set up. If you want to change parameters, use /config.")
         return
 
-    # Start repository configuration
+    # Send terms and conditions
     await update.message.reply_text(
-        f"Hello, {user}! 🔧\n"
-        "Let's set up your repository for monitoring and auto-submissions.\n"
-        "Please provide the following details step-by-step:"
+        "Hello, {user}! 🔧 Let's set up your repository for monitoring and auto-submissions.\n"
+        "Before proceeding, please review and accept the terms and conditions.",
     )
-    await update.message.reply_text("What is the repository URL?")
-    context.user_data["state"] = "initializing"
-    context.user_data["config_step"] = "repo_url"
+    await update.message.reply_text(TERMS_AND_CONDITIONS, parse_mode="MarkdownV2")
+    
+    # Set the state for accepting terms
+    context.user_data["state"] = "accept_terms"
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle user messages for configuration setup or state-specific actions.
+    Handle user messages for configuration setup, terms acceptance, or other actions.
     """
     state = context.user_data.get("state")
 
-    if state == "configuring":
-        await handle_config_step(update, context)
+    if state == "accept_terms":
+        response = update.message.text.strip().lower()
+        if response == "accept":
+            await update.message.reply_text("✅ Thank you for accepting the terms. Let's continue with the setup.\nPlease provide the following details step-by-step:")
+            await update.message.reply_text("What is the repository URL?")
+            context.user_data["state"] = "initializing"
+            context.user_data["config_step"] = "repo_url"
+        elif response == "abort":
+            await update.message.reply_text("❌ Setup aborted. You can restart the process by sending /setup.")
+            reset_user_data(context)
+        else:
+            await update.message.reply_text("Invalid response. Please type *`accept`* to proceed or *`abort`* to cancel.", parse_mode="MarkdownV2")
+
     elif state == "initializing":
         await handle_initializing(update, context)
+    elif state == "configuring":
+        await handle_config_step(update, context)
     elif state == "deleting":
         await delete(update, context)
     else:
