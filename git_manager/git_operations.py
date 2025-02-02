@@ -2,12 +2,22 @@ import os
 import subprocess
 import json
 from utils.file_operations import load_chat_config, get_chat_dir, get_repo_path
+from urllib.parse import urlparse
 
 # Centralized file for storing last commits
 LAST_COMMITS_FILE = "data/last_commits.json"
 
 # Ensure the data directory exists
 os.makedirs(os.path.dirname(LAST_COMMITS_FILE), exist_ok=True)
+
+
+# Convert HTTPS URL to SSH URL
+def convert_https_to_ssh(repo_url):
+    parsed = urlparse(repo_url)
+    if parsed.scheme == "https":
+        path = parsed.path.lstrip("/")
+        return f"git@{parsed.hostname}:{path}"
+    return repo_url
 
 
 # SSH Key Management
@@ -88,7 +98,7 @@ def execute_git_command(chat_id, command, telegram_bot=None, failure_message=Non
     # Prepare environment for SSH if needed
     env = os.environ.copy()
     if access_type == "ssh":
-        ssh_key_path = os.path.join(get_chat_dir(chat_id), "id_rsa")
+        ssh_key_path = os.path.abspath(os.path.join(get_chat_dir(chat_id), "id_rsa"))
         git_ssh_command = f"ssh -i {ssh_key_path} -o IdentitiesOnly=yes"
         env["GIT_SSH_COMMAND"] = git_ssh_command
 
@@ -120,7 +130,8 @@ def clone_repository(chat_id, repo_url, telegram_bot=None):
 
     try:
         if access_type == "ssh":
-            ssh_key_path = os.path.join(get_chat_dir(chat_id), "id_rsa")
+            repo_url = convert_https_to_ssh(repo_url)
+            ssh_key_path = os.path.abspath(os.path.join(get_chat_dir(chat_id), "id_rsa"))
             git_ssh_command = f"ssh -i {ssh_key_path} -o IdentitiesOnly=yes"
             env = os.environ.copy()
             env["GIT_SSH_COMMAND"] = git_ssh_command

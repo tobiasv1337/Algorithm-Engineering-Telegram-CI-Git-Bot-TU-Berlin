@@ -38,6 +38,8 @@ def process_commit(chat_id, branch, current_commit, config, oioioi_api, telegram
         telegram_bot.send_message(chat_id, message)
         return False
 
+    telegram_bot.send_message(chat_id, "✅ *Compilation Successful*")
+
     # Create ZIP files for submission
     zip_files, temp_dir = create_zip_files(config, chat_id)
     try:

@@ -395,7 +395,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = update.message.text.strip().lower()
         if response == "accept":
             await update.message.reply_text("✅ Thank you for accepting the terms. Let's continue with the setup.\nPlease provide the following details step-by-step:")
-            await update.message.reply_text("What is the repository URL?")
+            await update.message.reply_text("What is the repository URL?\n *IMPORTANT*: Make sure to your repo url is in this format: https://github\\.com/tobiasv1337/vertex\\_cover \\(always provide the https link and without any \\.git ending etc\\.\\)", parse_mode="MarkdownV2")
             context.user_data["state"] = "initializing"
             context.user_data["config_step"] = "repo_url"
         elif response == "abort":
@@ -451,6 +451,8 @@ async def handle_config_step(update: Update, context: ContextTypes.DEFAULT_TYPE)
         elif key in config_whitelist:
             if key == "auth_method":
                 await update.message.reply_text("Choose a new authentication method: [none, https, ssh]")
+            elif key == "repo_url":
+                await update.message.reply_text("Enter the new repository URL. *IMPORTANT*: Make sure to your repo url is in this format: https://github\\.com/tobiasv1337/vertex\\_cover \\(always provide the https link and without any \\.git ending etc\\.\\)", parse_mode="MarkdownV2")
             else:
                 await update.message.reply_text(f"Enter the new value for `{key}`:")
             context.user_data["config_step"] = "update_value"
